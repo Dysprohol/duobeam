@@ -12,6 +12,14 @@ The receiver runs on Samsung TVs (Tizen) and on Android TV / Google TV. You don'
 
 <p align="center"><img src="docs/img/app.jpg" width="560" alt="DuoBeam app on the Thor's bottom screen while streaming"></p>
 
+<p align="center">
+<b>Videos:</b> <a href="https://www.youtube.com/watch?v=C4tcTBTjeMU">setup from scratch</a> · <a href="https://www.youtube.com/watch?v=QhAqw3-BiSg">streaming both screens to a TV</a>
+</p>
+
+The videos start with DuoBeam already installed. Copying the APK to the handheld or the TV and installing the Samsung receiver
+are not shown: see [Install](#install). An Android TV takes the APK from a USB stick and a file manager,
+and for Samsung TVs there are many sideloading guides online besides the steps below.
+
 ## Why I made it
 
 I wanted to play games from my Thor on the TV and still see both screens.
@@ -109,6 +117,7 @@ Install the receiver on the TV first, then the app on the Thor.
 Get `DuoBeam-androidtv-<version>.apk` from [Releases](../../releases) and install it with one of these:
 
 - **Downloader** (by AFTVnews, in the Play Store on the TV): type the APK's download link and install it.
+- **USB stick**: copy the APK to it, plug it into the TV and open the file in a file manager.
 - **Send Files to TV** or any file manager: copy the APK from your phone, then open it on the TV.
 - **adb**, if you have it: turn on debugging in the TV's *Developer options* (on many TVs it's called USB or network debugging), then `adb connect <tv-ip>` and `adb install DuoBeam-androidtv-<version>.apk`.
 
