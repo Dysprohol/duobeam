@@ -1,0 +1,30 @@
+DuoBeam
+Copyright 2026 Gengaroshi
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project includes or bundles third-party software:
+
+1. scrcpy 4.1 - server sources (unmodified)
+   thor-app/third_party/scrcpy/  and  thor-app/android/app/libs/scrcpy-stubs.jar (compiled scrcpy AIDL stubs)
+   Copyright (C) 2018 Genymobile
+   Copyright (C) 2018-2026 Romain Vimont
+   Apache License 2.0 - https://github.com/Genymobile/scrcpy
+   (full text: thor-app/third_party/scrcpy/LICENSE)
+   DuoBeam's audio capture (ThorAudio.java) is adapted from scrcpy's AudioPlaybackCapture.
+
+2. libadb-android 3.1.1 (Gradle dependency, bundled in the APK)
+   Copyright 2021 Muntashir Al-Islam
+   Dual licensed GPL-3.0-or-later OR Apache-2.0; used here under Apache-2.0.
+   https://github.com/MuntashirAkon/libadb-android
+   Note: the library has an LGPL dependency.
+
+3. sun-security-android 1.1 (Gradle dependency, bundled in the APK)
+   GPL-2.0 with the "Classpath" exception.
+   https://github.com/MuntashirAkon/sun-security-android
+
+4. Conscrypt 2.5.3 (Gradle dependency, bundled in the APK)
+   Copyright The Android Open Source Project
+   Apache License 2.0 - https://github.com/google/conscrypt
+
+Samsung, Tizen, AYN and Thor are trademarks of their respective owners. DuoBeam is not affiliated with them.

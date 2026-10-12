@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- stable ids so the text fields keep their content when the screen is rebuilt -->
+    <item name="pair_code" type="id" />
+    <item name="pair_port" type="id" />
+    <item name="receiver_address" type="id" />
+</resources>

@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.duobeam.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.duobeam.app'
+        minSdk 30
+        targetSdk 33
+        versionCode 38
+        versionName '0.8.2'
+        ndk { abiFilters 'arm64-v8a' } // arm64-only target; keeps the native TLS/pairing libs out of other ABIs
+    }
+
+    buildFeatures {
+        aidl true
+        buildConfig true
+    }
+
+    sourceSets {
+        main {
+            // Sender (com.duobeam.*) and scrcpy 4.1 hidden-API wrappers, shared with build.sh.
+            // scrcpy's android/** classes are compile-time stubs only; they come from scrcpy-stubs.jar (compileOnly).
+            java.srcDirs += ['../../src', '../../third_party/scrcpy/server/src/main/java', 'src/gen/java']
+            java.exclude 'android/**'
+        }
+    }
+
+    // Release key: point DUOBEAM_SIGNING (env) or -PduobeamSigning at a properties file with
+    // storeFile, storePassword, keyAlias, keyPassword. Without it, release builds use the debug key.
+    def signingFile = System.getenv('DUOBEAM_SIGNING') ?: project.findProperty('duobeamSigning')
+    signingConfigs {
+        if (signingFile) {
+            def p = new Properties()
+            file(signingFile).withInputStream { p.load(it) }
+            release {
+                storeFile file(p.storeFile)
+                storePassword p.storePassword
+                keyAlias p.keyAlias
+                keyPassword p.keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingFile ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // Built-in wireless debugging client: pairing, TLS, shell.
+    implementation 'com.github.MuntashirAkon:libadb-android:3.1.1'
+    implementation 'com.github.MuntashirAkon:sun-security-android:1.1'
+    implementation 'org.conscrypt:conscrypt-android:2.5.3'
+    compileOnly files('libs/scrcpy-stubs.jar')
+}

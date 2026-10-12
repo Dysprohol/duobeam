@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph handheld [Handheld]
+    direction TB
+    app["DuoBeam app<br/>UI and setup"] --> helper["Helper process<br/>shell rights"]
+    helper --> video["Both screens → OpenGL<br/>→ hardware HEVC encoder"]
+    helper --> audio["Game audio capture"]
+  end
+  subgraph tv [TV]
+    direction TB
+    rx["DuoBeam receiver"]
+    rx --> samsung["Samsung: web app + TV service<br/>low-latency player"]
+    rx --> android["Android TV: MediaCodec"]
+  end
+  video -->|"Wi-Fi, TCP 8201<br/>video + audio"| rx
+  audio --> rx
+  rx -.->|"keyframe requests<br/>clock pings"| helper

@@ -1,0 +1,29 @@
+# build outputs
+build/
+.gradle/
+*.apk
+*.aab
+*.wgt
+*.log
+*.class
+*.dex
+
+# machine-specific
+local.properties
+
+# signing keys and Tizen certificates - never commit
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+certificate-profile.xml
+
+# editors / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

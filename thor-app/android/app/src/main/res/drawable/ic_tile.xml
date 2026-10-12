@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- dwa ekrany Thora + trojkat play (kafelek i powiadomienie) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M4,2h16a2,2 0,0 1,2 2v8a2,2 0,0 1,-2 2H4a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2zM4,4v8h16V4zM10,5.5v5l4,-2.5z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M7,15.5h10a1.5,1.5 0,0 1,1.5 1.5v4a1.5,1.5 0,0 1,-1.5 1.5H7a1.5,1.5 0,0 1,-1.5 -1.5v-4A1.5,1.5 0,0 1,7 15.5zM7.5,17.5v3h9v-3z" />
+</vector>

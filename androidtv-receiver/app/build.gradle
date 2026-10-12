@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.duobeam.tv'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.duobeam.tv'
+        minSdk 24          // Android TV 7+ (Chromecast with Google TV, Shield, Mi Box, TV sets with Google TV)
+        targetSdk 33
+        versionCode 9
+        versionName '0.2.2'
+    }
+
+    // Release key: point DUOBEAM_SIGNING (env) or -PduobeamSigning at a properties file with
+    // storeFile, storePassword, keyAlias, keyPassword. Without it, release builds use the debug key.
+    def signingFile = System.getenv('DUOBEAM_SIGNING') ?: project.findProperty('duobeamSigning')
+    signingConfigs {
+        if (signingFile) {
+            def p = new Properties()
+            file(signingFile).withInputStream { p.load(it) }
+            release {
+                storeFile file(p.storeFile)
+                storePassword p.storePassword
+                keyAlias p.keyAlias
+                keyPassword p.keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingFile ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

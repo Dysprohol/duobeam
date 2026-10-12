@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://duobeam.local/receiver" version="0.8.2" viewmodes="maximized">
+    <access origin="*" subdomains="true"/>
+    <tizen:application id="DuoBeamRcv.DuoBeam" package="DuoBeamRcv" required_version="3.0"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <feature name="http://tizen.org/feature/web.service"/>
+    <icon src="icon.png"/>
+    <name>DuoBeam</name>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:service id="DuoBeamRcv.DuoBeamService">
+        <tizen:content src="service/service.js"/>
+        <tizen:name>DuoBeamService</tizen:name>
+        <tizen:description>Receives the Thor stream (:8201) and serves it to the player (:8202)</tizen:description>
+    </tizen:service>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph handheld [Konsola]
+    direction TB
+    app["Aplikacja DuoBeam<br/>interfejs i konfiguracja"] --> helper["Proces pomocniczy<br/>uprawnienia powłoki"]
+    helper --> video["Oba ekrany → OpenGL<br/>→ sprzętowy enkoder HEVC"]
+    helper --> audio["Przechwytywanie dźwięku gry"]
+  end
+  subgraph tv [Telewizor]
+    direction TB
+    rx["Odbiornik DuoBeam"]
+    rx --> samsung["Samsung: aplikacja web + usługa na TV<br/>odtwarzacz niskiego opóźnienia"]
+    rx --> android["Android TV: MediaCodec"]
+  end
+  video -->|"Wi-Fi, TCP 8201<br/>obraz + dźwięk"| rx
+  audio --> rx
+  rx -.->|"prośby o klatkę kluczową<br/>synchronizacja zegara"| helper
