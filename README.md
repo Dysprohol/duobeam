@@ -99,12 +99,17 @@ so the receiver can show how long each frame spent on the Thor, on Wi-Fi and on 
 
 ![Delay meter on the TV](docs/img/delay-meter.jpg)
 
-Measured from capture on the Thor until the TV player shows the frame (the TV panel's own processing is not included):
+Built-in meter in 0.8.3, from the new picture on the Thor until the TV player has the frame
+(measured 2026-10-12, side by side, 60 fps). The TV's own picture processing after that point is not included:
 
-| receiver | typical delay |
+| receiver | meter |
 |---|---|
-| Samsung QE43Q67C (2023, Tizen 8), low-latency player | ~60 ms |
-| Xiaomi TV MiTV-MOOQ0 (Android TV 11), lowest delay mode | 45–100 ms |
+| Samsung QE43Q67C (2023, Tizen 8), low-latency player | ~45 ms |
+| Xiaomi TV MiTV-MOOQ0 (Android TV 11), lowest delay mode | ~100–130 ms |
+
+Two camera recordings of the Thor and the Xiaomi TV together (same day, same scene) showed ~133 ms and ~200 ms
+from the Thor's screen to the TV's screen. During the second one the Wi-Fi was congested and the meter read 64–103 ms,
+so this TV adds time after the point where the meter stops, and apps cannot see that part.
 
 ## Install
 
@@ -115,6 +120,10 @@ Install the receiver on the TV first, then the app on the Thor.
 ### 1a. Android TV / Google TV receiver
 
 Get `DuoBeam-androidtv-<version>.apk` from [Releases](../../releases) and install it with one of these:
+
+- **Obtainium**, if you use it on the TV. It adds this repository with a filter for the TV receiver APK and keeps it updated.
+
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-androidtv-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
 
 - **Downloader** (by AFTVnews, in the Play Store on the TV): type the APK's download link and install it.
 - **USB stick**: copy the APK to it, plug it into the TV and open the file in a file manager.
@@ -166,6 +175,12 @@ Good to know:
 ### 2. The app on the Thor
 
 1. Install `DuoBeam-handheld-<version>.apk` from [Releases](../../releases). If Play Protect warns about an unknown app, choose *More details → Install anyway*.
+   With [Obtainium](https://github.com/ImranR98/Obtainium) you also get updates:
+
+   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-handheld-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
+
+   (or add `https://github.com/Gengaroshi/duobeam` in Obtainium yourself and pick the `DuoBeam-handheld` file).
+
 2. Open DuoBeam and go through **One-time setup**:
    - Developer options must be on: *Settings → About → tap "Build number" 7 times*.
    - Tap **Set up**. Developer options open on the other screen, so the DuoBeam screen stays visible.

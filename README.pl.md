@@ -97,12 +97,17 @@ więc może pokazać, ile każda klatka spędziła na Thorze, w Wi-Fi i na telew
 
 ![Pomiar opóźnienia na TV](docs/img/delay-meter.jpg)
 
-Mierzone od przechwycenia na Thorze do pokazania klatki przez odtwarzacz TV (bez własnego przetwarzania panelu telewizora):
+Wbudowany licznik w 0.8.3, od nowego obrazu na Thorze do klatki w odtwarzaczu TV
+(pomiar 2026-10-12, obok siebie, 60 kl/s). Nie obejmuje własnego przetwarzania obrazu przez telewizor:
 
-| odbiornik | typowe opóźnienie |
+| odbiornik | licznik |
 |---|---|
-| Samsung QE43Q67C (2023, Tizen 8), odtwarzacz niskiego opóźnienia | ~60 ms |
-| Xiaomi TV MiTV-MOOQ0 (Android TV 11), tryb najmniejszego opóźnienia | 45–100 ms |
+| Samsung QE43Q67C (2023, Tizen 8), odtwarzacz niskiego opóźnienia | ~45 ms |
+| Xiaomi TV MiTV-MOOQ0 (Android TV 11), tryb najmniejszego opóźnienia | ~100–130 ms |
+
+Dwa nagrania kamerą Thora i telewizora Xiaomi naraz (ten sam dzień, ta sama scena) pokazały ~133 ms i ~200 ms
+od ekranu Thora do ekranu TV. Podczas drugiego Wi-Fi było przeciążone, a licznik pokazywał 64–103 ms,
+więc ten telewizor dokłada czas już po miejscu, w którym licznik kończy pomiar, i aplikacje tej części nie widzą.
 
 ## Instalacja
 
@@ -113,6 +118,10 @@ Najpierw zainstaluj odbiornik na TV, potem aplikację na Thorze.
 ### 1a. Odbiornik Android TV / Google TV
 
 Pobierz `DuoBeam-androidtv-<wersja>.apk` z [Releases](../../releases) i zainstaluj jednym ze sposobów:
+
+- **Obtainium**, jeśli używasz go na TV. Dodaje to repozytorium z filtrem na APK odbiornika i pilnuje aktualizacji.
+
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-androidtv-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
 
 - **Downloader** (od AFTVnews, ze Sklepu Play na TV): wpisz link do pliku APK i zainstaluj.
 - **Pendrive**: skopiuj na niego APK, podłącz do TV i otwórz plik w menedżerze plików.
@@ -164,6 +173,12 @@ Warto wiedzieć:
 ### 2. Aplikacja na Thorze
 
 1. Zainstaluj `DuoBeam-handheld-<wersja>.apk` z [Releases](../../releases). Jeśli Play Protect ostrzega o nieznanej aplikacji, wybierz *Więcej szczegółów → Zainstaluj mimo to*.
+   Przez [Obtainium](https://github.com/ImranR98/Obtainium) dostaniesz też aktualizacje:
+
+   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-handheld-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
+
+   (albo dodaj w Obtainium sam adres `https://github.com/Gengaroshi/duobeam` i wybierz plik `DuoBeam-handheld`).
+
 2. Otwórz DuoBeam i przejdź **Jednorazową konfigurację**:
    - Opcje programisty muszą być włączone: *Ustawienia → Informacje o urządzeniu → 7 razy dotknij „Numer kompilacji”*.
    - Naciśnij **Konfiguruj**. Opcje programisty otworzą się na drugim ekranie, więc ekran DuoBeam zostaje widoczny.
