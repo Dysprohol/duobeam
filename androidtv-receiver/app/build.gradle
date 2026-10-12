@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+// single version for all components, see version.properties
+def duobeamVersion = new Properties()
+file('../../version.properties').withInputStream { duobeamVersion.load(it) }
+
 android {
     namespace 'com.duobeam.tv'
     compileSdk 36
@@ -10,8 +14,12 @@ android {
         applicationId 'com.duobeam.tv'
         minSdk 24          // Android TV 7+ (Chromecast with Google TV, Shield, Mi Box, TV sets with Google TV)
         targetSdk 33
-        versionCode 9
-        versionName '0.2.2'
+        versionCode 10
+        versionName duobeamVersion.version
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     // Release key: point DUOBEAM_SIGNING (env) or -PduobeamSigning at a properties file with

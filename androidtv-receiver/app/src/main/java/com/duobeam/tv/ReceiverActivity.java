@@ -36,7 +36,7 @@ import java.util.Map;
 /** DuoBeam receiver for Android TV: waits for the handheld, shows its screens full-screen with game sound. */
 public class ReceiverActivity extends Activity implements StreamServer.Listener, VideoOut.Listener {
 
-    static final String VERSION = "0.2.2";
+    static final String VERSION = BuildConfig.VERSION_NAME;
 
     // ---- texts: English default, Polish with left/right on the remote (remembered) ----
     private static final Map<String, String[]> T = new HashMap<>();

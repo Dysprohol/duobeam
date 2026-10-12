@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+// single version for all components, see version.properties
+def duobeamVersion = new Properties()
+file('../../../version.properties').withInputStream { duobeamVersion.load(it) }
+
 android {
     namespace 'com.duobeam.app'
     compileSdk 36
@@ -10,8 +14,8 @@ android {
         applicationId 'com.duobeam.app'
         minSdk 30
         targetSdk 33
-        versionCode 38
-        versionName '0.8.2'
+        versionCode 39
+        versionName duobeamVersion.version
         ndk { abiFilters 'arm64-v8a' } // arm64-only target; keeps the native TLS/pairing libs out of other ABIs
     }
 
@@ -70,3 +74,16 @@ dependencies {
     implementation 'org.conscrypt:conscrypt-android:2.5.3'
     compileOnly files('libs/scrcpy-stubs.jar')
 }
+
+// Sender.VERSION and the Samsung receiver are not built by Gradle; stop the build if they drift from version.properties
+tasks.register('checkVersion') {
+    doLast {
+        def v = duobeamVersion.version
+        def root = file('../../..')
+        ['thor-app/src/com/duobeam/Sender.java': "VERSION = \"$v\"", 'tizen-receiver/config.xml': "version=\"$v\"",
+         'tizen-receiver/js/i18n.js': "RECEIVER_VERSION = '$v'", 'tizen-receiver/service/service.js': "VERSION = '$v'"].each { path, s ->
+            if (!new File(root, path).text.contains(s)) throw new GradleException("$path does not carry version $v (version.properties)")
+        }
+    }
+}
+preBuild.dependsOn checkVersion
