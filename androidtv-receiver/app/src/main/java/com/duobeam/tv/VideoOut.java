@@ -61,6 +61,7 @@ final class VideoOut {
     final Stats waitTime = new Stats(), decodeTime = new Stats(), renderTime = new Stats();
     private final java.util.HashMap<Long, Long> queuedAt = new java.util.HashMap<>(), outputAt = new java.util.HashMap<>();
     volatile boolean renderCallbacks; // some decoders never report rendered frames
+    volatile int rendered; // frames that reached the screen; shown - rendered = dropped by the compositor
 
     private final MediaCodec codec;
     private final HandlerThread thread;
@@ -157,7 +158,10 @@ final class VideoOut {
                 feed();
             }
             try {
-                c.releaseOutputBuffer(index, true); // show now
+                // show now. A timed release (releaseOutputBuffer(index, System.nanoTime())) cut the meter from ~85 to ~44 ms but
+                // not the real delay: camera on Thor + TV gave 133 ms before and 150-167 ms after (Xiaomi MiTV-MOOQ0,
+                // measured 2026-10-12), so frames only waited further down the TV's video path, out of the meter's sight
+                c.releaseOutputBuffer(index, true);
             } catch (Exception e) {
                 return;
             }
@@ -238,6 +242,7 @@ final class VideoOut {
     private void onRendered(long ptsUs, long renderNs) {
         if (!running) return;
         renderCallbacks = true;
+        rendered++;
         Long o;
         synchronized (lock) {
             o = outputAt.remove(ptsUs);

@@ -113,7 +113,7 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
     // latency: frame timestamps from the sender (media us -> {capture, send, receive} in TV clock ms)
     private final Map<Long, double[]> marks = Collections.synchronizedMap(new HashMap<>());
     private final ArrayList<double[]> lat = new ArrayList<>();
-    private int lastShown;
+    private int lastShown, lastRendered;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -547,14 +547,16 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
                 }
             }
             server.extraStatus = ",\"lat\":" + latJson + ",\"tvStages\":" + (tvStages == null ? "null" : "\"" + tvStages + "\"")
-                    + ",\"rendered\":" + (v != null && v.renderCallbacks) + ",\"display\":\"" + displayInfo() + "\"";
+                    + ",\"renderCallbacks\":" + (v != null && v.renderCallbacks) + ",\"shown\":" + (v == null ? 0 : v.shown)
+                    + ",\"rendered\":" + (v == null ? 0 : v.rendered) + ",\"display\":\"" + displayInfo() + "\"";
             if (now < toastUntil) {
                 // mode toast stays for a moment
             } else if (hudOn) {
                 AudioOut a = audio;
                 int shown = v == null ? 0 : v.shown;
                 StringBuilder sb = new StringBuilder();
-                sb.append(v == null ? "-" : v.width + "x" + v.height).append("  ").append((shown - lastShown) * 2).append(" fps  ")
+                sb.append(v == null ? "-" : v.width + "x" + v.height).append("  ").append((shown - lastShown) * 2).append(" fps")
+                        .append(v != null && v.renderCallbacks ? ", on screen " + Math.max(0, v.rendered - lastRendered) * 2 : "").append("  ")
                         .append(displayInfo());
                 synchronized (lat) {
                     if (!lat.isEmpty()) {
@@ -573,6 +575,7 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
                 sb.append("\n").append(s("mode")).append(": ").append(s("mode" + mode));
                 hud.setText(sb.toString());
                 lastShown = shown;
+                lastRendered = v == null ? 0 : v.rendered;
             }
             main.postDelayed(this, 500);
         }
