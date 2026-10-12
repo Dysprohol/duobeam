@@ -45,7 +45,7 @@ final class DualCapture {
         IBinder scDisplay;
         VirtualDisplay vd;
         final float[] mtx = new float[16];
-        volatile boolean fresh;
+        int pending; // buffers announced since the last tick; only the newest is drawn, the rest are skipped
         boolean hasFrame;
 
         Source(int displayId) {
@@ -67,6 +67,13 @@ final class DualCapture {
     private FloatBuffer vbuf, tbuf;
     private volatile boolean running;
     private long startUptime, frameNo;
+
+    // render time -> time the newest drawn source buffer was produced (SurfaceTexture timestamp, System.nanoTime base),
+    // so the latency meter starts when the picture appears on the device instead of at the next render tick
+    private final long[] ringRender = new long[128], ringSource = new long[128];
+    private int ringPos;
+    final Stats latch = new Stats(); // source buffer produced -> drawn into the output frame
+    volatile int skippedBuffers, badTimestamps;
 
     DualCapture(int[] displayIds, String layout, int fps) {
         sources = new Source[displayIds.length];
@@ -185,7 +192,7 @@ final class DualCapture {
         int w = s.size.getWidth(), h = s.size.getHeight();
         s.st = new SurfaceTexture(s.tex);
         s.st.setDefaultBufferSize(w, h);
-        s.st.setOnFrameAvailableListener(st -> s.fresh = true, handler);
+        s.st.setOnFrameAvailableListener(st -> s.pending++, handler);
         s.surface = new Surface(s.st);
         try {
             s.vd = ServiceManager.getDisplayManager().createVirtualDisplay("duobeam-" + s.displayId, w, h, s.displayId, s.surface);
@@ -218,13 +225,16 @@ final class DualCapture {
         GLES20.glVertexAttribPointer(tcLoc, 2, GLES20.GL_FLOAT, false, 0, tbuf);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glUniform1i(texLoc, 0);
+        long newestSource = 0;
         for (Source s : sources) {
             if (s.dst == null) continue;
-            if (s.fresh) {
-                s.fresh = false;
+            if (s.pending > 0) {
+                skippedBuffers += s.pending - 1;
+                s.pending = 0;
                 s.st.updateTexImage();
                 s.st.getTransformMatrix(s.mtx);
                 s.hasFrame = true;
+                newestSource = Math.max(newestSource, s.st.getTimestamp());
             }
             if (!s.hasFrame) continue;
             // GL viewport origin is bottom-left
@@ -233,7 +243,22 @@ final class DualCapture {
             GLES20.glUniformMatrix4fv(mtxLoc, 1, false, s.mtx, 0);
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         }
-        EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, System.nanoTime());
+        long renderNs = System.nanoTime();
+        if (newestSource > 0) {
+            long d = renderNs - newestSource;
+            if (d < 0 || d > 1_000_000_000L) { // not on the System.nanoTime clock: keep the render time
+                badTimestamps++;
+                newestSource = 0;
+            } else {
+                latch.add(d / 1000);
+            }
+        }
+        synchronized (ringRender) {
+            ringRender[ringPos] = renderNs / 1000;
+            ringSource[ringPos] = newestSource;
+            ringPos = (ringPos + 1) % ringRender.length;
+        }
+        EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, renderNs);
         EGL14.eglSwapBuffers(eglDisplay, eglSurface);
         frameNo++;
         long next = startUptime + frameNo * 1000 / fps;
@@ -244,6 +269,14 @@ final class DualCapture {
             next = now;
         }
         handler.postAtTime(this::tick, next);
+    }
+
+    /** System.nanoTime when the newest source buffer in the frame rendered at renderUs was produced; 0 = repeated frame or unknown. */
+    long sourceTimeNs(long renderUs) {
+        synchronized (ringRender) {
+            for (int i = 0; i < ringRender.length; i++) if (ringRender[i] == renderUs) return ringSource[i];
+        }
+        return 0;
     }
 
     void stop() {

@@ -383,6 +383,12 @@ public final class Sender {
         codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_HEVC);
         codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         Surface input = codec.createInputSurface();
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            // a vendor key set in the format is silently ignored when the encoder does not list it
+            StringBuilder vp = new StringBuilder();
+            for (String k : codec.getSupportedVendorParameters()) if (k.contains("latency")) vp.append(' ').append(k);
+            Ln.i("encoder vendor latency keys:" + (vp.length() == 0 ? " none" : vp));
+        }
         codec.start();
         capture.start(input);
         Ln.i("encoder " + codec.getName() + " " + size.getWidth() + "x" + size.getHeight() + " @" + bitrate + " bps, iframe " + iframe + " s");
@@ -404,6 +410,9 @@ public final class Sender {
         long skipped = 0, lastCongestion = 0, lastRateChange = 0, lastSyncReq = 0;
         int curBitrate = bitrate * 6 / 10;
         final long runStart = System.currentTimeMillis();
+        // per-stage timing, logged every 10 s next to the frame counters
+        final Stats encodeTime = new Stats(), sendTime = new Stats();
+        long lastMarkSlot = -1000;
 
         try {
             while (!stopRequested) {
@@ -447,6 +456,7 @@ public final class Sender {
                 }
                 int idx = codec.dequeueOutputBuffer(info, 100_000);
                 if (idx < 0) continue;
+                if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) encodeTime.add(System.nanoTime() / 1000 - info.presentationTimeUs);
                 ByteBuffer bb = codec.getOutputBuffer(idx);
                 byte[] data = Fmp4.toArray(bb, info.offset, info.size);
                 codec.releaseOutputBuffer(idx, false);
@@ -521,13 +531,18 @@ public final class Sender {
                 }
                 if (out != null && !drop) {
                     try {
+                        long sendStart = System.nanoTime();
                         send(out, type, msg);
+                        if (type != 0) sendTime.add((System.nanoTime() - sendStart) / 1000);
                         if (type == 0) liveOut = out;
                         else sent++;
-                        if (type != 0 && slot % 30 == 0) {
-                            // timestamp: frame at media time slot*frameUs was captured at capWall (device clock), sent now
+                        // timestamp: frame at media time slot*frameUs showed new content at capWall (device clock), sent now.
+                        // Only frames with a new source buffer: a repeated frame carries an old picture.
+                        long srcNs = type != 0 && slot - lastMarkSlot >= 4 ? capture.sourceTimeNs(info.presentationTimeUs) : 0;
+                        if (srcNs > 0) {
+                            lastMarkSlot = slot;
                             long nowMs = System.currentTimeMillis();
-                            long capWall = nowMs - (System.nanoTime() / 1000 - info.presentationTimeUs) / 1000;
+                            long capWall = nowMs - (System.nanoTime() - srcNs) / 1_000_000;
                             send(out, 6, java.nio.ByteBuffer.allocate(24).putLong(slot * frameUs).putLong(capWall).putLong(nowMs).array());
                         }
                     } catch (IOException e) {
@@ -547,6 +562,9 @@ public final class Sender {
                     double el = (System.currentTimeMillis() - t0) / 1000.0;
                     Ln.i(String.format("frames %d (sent %d, dropped on congestion %d) in %.0f s = %.1f fps, bitrate %d kb/s",
                             frames, sent, skipped, el, frames / el, curBitrate / 1000));
+                    Ln.i("timing ms p50/p95/max: source->render " + capture.latch.takeLine() + ", render->dequeued " + encodeTime.takeLine()
+                            + ", send " + sendTime.takeLine() + "; skipped source buffers " + capture.skippedBuffers
+                            + (capture.badTimestamps > 0 ? ", bad source timestamps " + capture.badTimestamps : ""));
                 }
             }
         } finally {

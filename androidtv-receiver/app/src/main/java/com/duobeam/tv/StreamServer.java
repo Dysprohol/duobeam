@@ -38,6 +38,7 @@ final class StreamServer {
     private volatile Socket source;
     private volatile DataOutputStream sourceOut;
     volatile long frames;
+    volatile String extraStatus = ""; // latency meter fields appended to /status (JSON members with a leading comma)
     // clock sync with the sender: offset = senderTime - tvTime, from the lowest-RTT ping of the last 15
     private final ArrayDeque<double[]> clock = new ArrayDeque<>();
     volatile double clockOffset = Double.NaN, clockRtt = Double.NaN;
@@ -196,7 +197,7 @@ final class StreamServer {
                 body = "{\"app\":\"DuoBeam\",\"role\":\"receiver\",\"version\":\"" + version + "\",\"platform\":\"androidtv\",\"ingestPort\":"
                         + IN_PORT + ",\"busy\":" + busy + ",\"player\":\"android\"}";
             } else if (path.startsWith("/status")) {
-                body = "{\"player\":\"android\",\"version\":\"" + version + "\",\"src\":" + (busy ? 1 : 0) + ",\"frames\":" + frames + "}";
+                body = "{\"player\":\"android\",\"version\":\"" + version + "\",\"src\":" + (busy ? 1 : 0) + ",\"frames\":" + frames + extraStatus + "}";
             } else {
                 code = 404;
                 body = "{\"error\":\"not found\"}";

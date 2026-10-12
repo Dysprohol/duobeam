@@ -27,3 +27,8 @@ certificate-profile.xml
 Thumbs.db
 __pycache__/
 *.pyc
+
+# measurement recordings - stay local
+docs/vid/
+*.mp4
+*.mov

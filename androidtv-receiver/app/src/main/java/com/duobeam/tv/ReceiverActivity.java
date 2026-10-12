@@ -470,14 +470,30 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
             playing = true;
             main.post(() -> showVideo(true));
         }
+        VideoOut v = video;
+        if (v == null || !v.renderCallbacks) addLatency(ptsUs, System.currentTimeMillis());
+    }
+
+    @Override
+    public void onFrameRendered(long ptsUs, long renderNs) {
+        addLatency(ptsUs, System.currentTimeMillis() - (System.nanoTime() - renderNs) / 1e6);
+    }
+
+    /** One meter sample: the frame with a sender mark reached the screen surface at shownMs (TV clock). */
+    private void addLatency(long ptsUs, double shownMs) {
         double[] m = marks.remove(ptsUs);
-        if (m != null) {
-            double now = System.currentTimeMillis();
-            synchronized (lat) {
-                lat.add(new double[] {now - m[0], m[1] - m[0], m[2] - m[1], now - m[2]});
-                if (lat.size() > 30) lat.remove(0);
-            }
+        if (m == null) return;
+        synchronized (lat) {
+            lat.add(new double[] {shownMs - m[0], m[1] - m[0], m[2] - m[1], shownMs - m[2]});
+            if (lat.size() > 120) lat.remove(0); // ~8 s at one mark per 4 frames
         }
+    }
+
+    private static double pct(ArrayList<double[]> l, int k, int p) {
+        ArrayList<Double> v = new ArrayList<>();
+        for (double[] x : l) v.add(x[k]);
+        Collections.sort(v);
+        return v.isEmpty() ? Double.NaN : v.get(Math.min(v.size() - 1, v.size() * p / 100));
     }
 
     private long lastKeyReq;
@@ -488,6 +504,18 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
         if (now - lastKeyReq < 300) return;
         lastKeyReq = now;
         server.requestKeyframe();
+    }
+
+    private String displayInfo;
+
+    /** Refresh rate and whether the TV offers a game mode (ALLM / minimal post-processing) to apps. */
+    private String displayInfo() {
+        if (displayInfo == null) {
+            android.view.Display d = getWindowManager().getDefaultDisplay();
+            String allm = android.os.Build.VERSION.SDK_INT >= 30 ? (d.isMinimalPostProcessingSupported() ? "yes" : "no") : "?";
+            displayInfo = Math.round(d.getRefreshRate()) + " Hz, game mode " + allm;
+        }
+        return displayInfo;
     }
 
     private static double median(ArrayList<double[]> l, int k) {
@@ -508,21 +536,34 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
                 setState("stopped");
             }
             if (switching.getVisibility() == View.VISIBLE && now > switchingUntil && !playing) switching.setVisibility(View.GONE);
+            VideoOut v = video;
+            String tvStages = v == null ? null : v.waitTime.line() + " / " + v.decodeTime.line() + " / " + (v.renderCallbacks ? v.renderTime.line() : "-");
+            String latJson = "null";
+            synchronized (lat) {
+                if (!lat.isEmpty()) {
+                    latJson = "{\"total\":" + Math.round(median(lat, 0)) + ",\"totalP95\":" + Math.round(pct(lat, 0, 95)) + ",\"handheld\":"
+                            + Math.round(median(lat, 1)) + ",\"wifi\":" + Math.round(median(lat, 2)) + ",\"tv\":" + Math.round(median(lat, 3))
+                            + ",\"n\":" + lat.size() + "}";
+                }
+            }
+            server.extraStatus = ",\"lat\":" + latJson + ",\"tvStages\":" + (tvStages == null ? "null" : "\"" + tvStages + "\"")
+                    + ",\"rendered\":" + (v != null && v.renderCallbacks) + ",\"display\":\"" + displayInfo() + "\"";
             if (now < toastUntil) {
                 // mode toast stays for a moment
             } else if (hudOn) {
-                VideoOut v = video;
                 AudioOut a = audio;
                 int shown = v == null ? 0 : v.shown;
                 StringBuilder sb = new StringBuilder();
-                sb.append(v == null ? "-" : v.width + "x" + v.height).append("  ").append((shown - lastShown) * 2).append(" fps");
+                sb.append(v == null ? "-" : v.width + "x" + v.height).append("  ").append((shown - lastShown) * 2).append(" fps  ")
+                        .append(displayInfo());
                 synchronized (lat) {
                     if (!lat.isEmpty()) {
-                        sb.append("\n").append(s("delay")).append(' ').append(Math.round(median(lat, 0))).append(" ms  (handheld ")
-                                .append(Math.round(median(lat, 1))).append(" / Wi-Fi ").append(Math.round(median(lat, 2))).append(" / TV ")
-                                .append(Math.round(median(lat, 3))).append(')');
+                        sb.append("\n").append(s("delay")).append(' ').append(Math.round(median(lat, 0))).append(" ms, p95 ")
+                                .append(Math.round(pct(lat, 0, 95))).append("  (handheld ").append(Math.round(median(lat, 1)))
+                                .append(" / Wi-Fi ").append(Math.round(median(lat, 2))).append(" / TV ").append(Math.round(median(lat, 3))).append(')');
                     }
                 }
+                if (tvStages != null) sb.append("\nTV wait / decode / render p50/p95/max ").append(tvStages);
                 if (v != null) {
                     sb.append("\ndropped ").append(v.dropped).append("  queue max ").append(v.maxQueue).append("  catch-ups ").append(v.catchUps);
                     v.maxQueue = 0;

@@ -24,6 +24,9 @@ final class VideoOut {
     interface Listener {
         void onFrameShown(long ptsUs);
 
+        /** The frame reached the display surface at renderNs (System.nanoTime base); later than onFrameShown. */
+        void onFrameRendered(long ptsUs, long renderNs);
+
         /** Frames had to be dropped - ask the sender for a fresh keyframe instead of waiting up to 2 s. */
         void onNeedKeyframe();
     }
@@ -45,6 +48,7 @@ final class VideoOut {
         final byte[] data;
         final long pts;
         final boolean key;
+        final long arrivedNs = System.nanoTime();
 
         Frame(byte[] data, long pts, boolean key) {
             this.data = data;
@@ -52,6 +56,11 @@ final class VideoOut {
             this.key = key;
         }
     }
+
+    // per-stage timing on the TV: network -> decoder input (queue wait), decoder input -> output, output -> on the surface
+    final Stats waitTime = new Stats(), decodeTime = new Stats(), renderTime = new Stats();
+    private final java.util.HashMap<Long, Long> queuedAt = new java.util.HashMap<>(), outputAt = new java.util.HashMap<>();
+    volatile boolean renderCallbacks; // some decoders never report rendered frames
 
     private final MediaCodec codec;
     private final HandlerThread thread;
@@ -93,6 +102,7 @@ final class VideoOut {
             f.setInteger(MediaFormat.KEY_PRIORITY, 0); // realtime
             f.setInteger("vdec-lowlatency", 1); // some vendor decoders (Amlogic/MTK) read this
             c.configure(f, surface, null, 0);
+            c.setOnFrameRenderedListener((codec, pts, renderNs) -> v.onRendered(pts, renderNs), new Handler(ht.getLooper()));
             c.start();
             Log.i(TAG, "decoder " + name + " " + init.width + "x" + init.height);
             return v;
@@ -139,6 +149,11 @@ final class VideoOut {
             synchronized (lock) {
                 if (inFlight > 0) inFlight--;
                 lastOutputAt = System.currentTimeMillis();
+                long now = System.nanoTime();
+                Long q = queuedAt.remove(info.presentationTimeUs);
+                if (q != null) decodeTime.add((now - q) / 1e6);
+                if (outputAt.size() > 64) outputAt.clear();
+                outputAt.put(info.presentationTimeUs, now);
                 feed();
             }
             try {
@@ -210,10 +225,25 @@ final class VideoOut {
                 in.put(f.data);
                 codec.queueInputBuffer(idx, 0, f.data.length, f.pts, f.key ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0);
                 inFlight++;
+                long now = System.nanoTime();
+                waitTime.add((now - f.arrivedNs) / 1e6);
+                if (queuedAt.size() > 64) queuedAt.clear();
+                queuedAt.put(f.pts, now);
             } catch (Exception e) {
                 Log.w(TAG, "queue: " + e);
             }
         }
+    }
+
+    private void onRendered(long ptsUs, long renderNs) {
+        if (!running) return;
+        renderCallbacks = true;
+        Long o;
+        synchronized (lock) {
+            o = outputAt.remove(ptsUs);
+        }
+        if (o != null) renderTime.add((renderNs - o) / 1e6);
+        listener.onFrameRendered(ptsUs, renderNs);
     }
 
     void release() {
