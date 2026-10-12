@@ -63,6 +63,10 @@ public class PairingReceiver extends BroadcastReceiver {
         discovery = AdbLauncher.discoverPairingPort(app, port -> {
             if (port == pairingPort) return;
             pairingPort = port;
+            if (port == 0) { // pairing window closed; the next one gets a new port
+                uiState(L.s("pair_searching"), false);
+                return;
+            }
             notify(app, L.s("pair_notif_title"), L.s("pair_notif_text"), true);
             uiState(L.s("pair_found"), false);
         });

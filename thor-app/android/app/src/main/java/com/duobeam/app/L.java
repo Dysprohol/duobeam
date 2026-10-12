@@ -87,6 +87,8 @@ final class L {
         t("chk_dev_fix", "Turn them on: Settings > About > tap \"Build number\" 7 times.",
                 "Włącz je: Ustawienia > Informacje o urządzeniu > 7 razy dotknij \"Numer kompilacji\".");
         t("chk_dev_btn", "Open About", "Otwórz Informacje");
+        t("dev_off_hint", "Developer options are off. Tap \"Build number\" 7 times on this screen (Samsung: Software information > Build number), then come back to DuoBeam.",
+                "Opcje programisty są wyłączone. Dotknij 7 razy \"Numer kompilacji\" na tym ekranie (Samsung: Informacje o oprogramowaniu > Numer wersji), potem wróć do DuoBeam.");
         t("chk_wifi", "Wireless debugging is on (needs Wi-Fi)", "Debugowanie bezprzewodowe włączone (wymaga Wi-Fi)");
         t("chk_wifi_fix", "Developer options > Wireless debugging > turn it on.", "Opcje programisty > Debugowanie bezprzewodowe > włącz.");
         t("chk_wifi_btn", "Open developer options", "Otwórz opcje programisty");

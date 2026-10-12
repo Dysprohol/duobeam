@@ -133,13 +133,19 @@ final class AdbLauncher {
     }
 
     /** Wireless debugging port of this device: _adb-tls-connect via mDNS, filtered by our own IP addresses. */
-    static int findConnectPort(Context c, long timeoutMs) {
+    /** IP addresses of this device, as NsdServiceInfo.getHost() prints them. */
+    private static java.util.Set<String> ownAddresses() {
         java.util.Set<String> mine = new java.util.HashSet<>();
         try {
             for (java.net.NetworkInterface ni : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces()))
                 for (java.net.InetAddress a : java.util.Collections.list(ni.getInetAddresses())) mine.add(a.getHostAddress());
         } catch (Exception ignored) {
         }
+        return mine;
+    }
+
+    static int findConnectPort(Context c, long timeoutMs) {
+        java.util.Set<String> mine = ownAddresses();
         NsdManager nsd = c.getSystemService(NsdManager.class);
         java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.atomic.AtomicInteger found = new java.util.concurrent.atomic.AtomicInteger(0);
@@ -226,15 +232,28 @@ final class AdbLauncher {
         void onPort(int port);
     }
 
-    /** Discovers the pairing port, which the "Pair with pairing code" dialog advertises via mDNS. */
+    /**
+     * Discovers the pairing port, which the "Pair with pairing code" dialog advertises via mDNS. Each opening of the
+     * dialog gets a new port; cb gets 0 when the dialog closes. Only this device's own service counts: other phones
+     * on the network can have their pairing dialog open too.
+     */
     static NsdManager.DiscoveryListener discoverPairingPort(Context c, PortCallback cb) {
         NsdManager nsd = c.getSystemService(NsdManager.class);
+        java.util.Set<String> mine = ownAddresses();
+        java.util.concurrent.atomic.AtomicReference<String> current = new java.util.concurrent.atomic.AtomicReference<>();
         NsdManager.DiscoveryListener l = new NsdManager.DiscoveryListener() {
             @Override public void onStartDiscoveryFailed(String t, int e) { }
             @Override public void onStopDiscoveryFailed(String t, int e) { }
             @Override public void onDiscoveryStarted(String t) { }
             @Override public void onDiscoveryStopped(String t) { }
-            @Override public void onServiceLost(NsdServiceInfo i) { }
+
+            @Override
+            public void onServiceLost(NsdServiceInfo i) {
+                if (i.getServiceName() != null && i.getServiceName().equals(current.get())) {
+                    current.set(null);
+                    cb.onPort(0);
+                }
+            }
 
             @Override
             public void onServiceFound(NsdServiceInfo info) {
@@ -243,6 +262,10 @@ final class AdbLauncher {
 
                     @Override
                     public void onServiceResolved(NsdServiceInfo i) {
+                        String host = i.getHost() != null ? i.getHost().getHostAddress() : "";
+                        Log.i(TAG, "adb: pairing mDNS " + i.getServiceName() + " " + host + ":" + i.getPort());
+                        if (!mine.isEmpty() && !mine.contains(host)) return;
+                        current.set(i.getServiceName());
                         cb.onPort(i.getPort());
                     }
                 });

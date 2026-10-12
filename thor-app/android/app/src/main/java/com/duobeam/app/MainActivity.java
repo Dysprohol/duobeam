@@ -106,9 +106,27 @@ public class MainActivity extends Activity implements StreamClient.Listener {
     @Override
     protected void onResume() {
         super.onResume();
+        resumed = true;
         // side bar enabled but overlay permission denied: don't report it as enabled
         if (settings.overlay() && !android.provider.Settings.canDrawOverlays(this)) client.setOverlay(false);
         updateOverlayPerm();
+        if (devOffShown && AdbLauncher.devOptionsOn(this)) { // back from About with Developer options now on: continue there
+            devOffShown = false;
+            openAwayFromMe(new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+        }
+    }
+
+    private boolean devOffShown; // About was opened because Developer options were off
+
+    /**
+     * Developer options, or "About phone" when they are off: opening Developer options then only shows "not available",
+     * and "Build number" on About is what turns them on. After that, onResume opens Developer options by itself.
+     */
+    private Intent devSettingsIntent() {
+        if (AdbLauncher.devOptionsOn(this)) return new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS);
+        devOffShown = true;
+        android.widget.Toast.makeText(this, L.s("dev_off_hint"), android.widget.Toast.LENGTH_LONG).show();
+        return new Intent(android.provider.Settings.ACTION_DEVICE_INFO_SETTINGS);
     }
 
     private void openOverlaySettings() {
@@ -123,8 +141,11 @@ public class MainActivity extends Activity implements StreamClient.Listener {
     protected void onPause() {
         // don't come back with the address field focused and the keyboard popping up
         if (tvAddr != null && getCurrentFocus() == tvAddr) leaveField(tvAddr);
+        resumed = false;
         super.onPause();
     }
+
+    private boolean resumed; // Android blocks activity starts from an app in the background
 
     private void maybeAutostart() {
         if (!autostarted && settings.autostart() && client.ready() && !client.isStreaming() && !client.status().startsWith("STARTING")
@@ -197,7 +218,7 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         boolean wantBox = pairRequested || (!paired && settings.setupInProgress());
         if (wantBox && pairBox.getVisibility() != View.VISIBLE) {
             pairBox.setVisibility(View.VISIBLE); // pairing in progress: restore the box even when reopened from the launcher
-            if (PairingReceiver.port() > 0 && portInput.getText().length() == 0) portInput.setText(String.valueOf(PairingReceiver.port()));
+            syncPortField(PairingReceiver.port());
         } else if (!wantBox && pairBox.getVisibility() == View.VISIBLE) {
             pairBox.setVisibility(View.GONE);
         }
@@ -206,11 +227,15 @@ public class MainActivity extends Activity implements StreamClient.Listener {
     /** Setup checklist: shows which steps are done and an action button for each remaining one. */
     private void buildChecklist(boolean paired, boolean done) {
         boolean dev = AdbLauncher.devOptionsOn(this), wifi = AdbLauncher.wirelessDebuggingOn(this);
+        if (dev && devOffShown && resumed) { // turned on while About is open (on the Thor the app stays resumed on the other screen)
+            devOffShown = false;
+            openAwayFromMe(new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+        }
         String sig = dev + "" + wifi + paired + done + client.granting() + L.lang();
         if (sig.equals(checklistSig)) return;
         checklistSig = sig;
         checklist.removeAllViews();
-        View.OnClickListener openDev = v -> openAwayFromMe(new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+        View.OnClickListener openDev = v -> openAwayFromMe(devSettingsIntent());
         checkRow(dev || done, L.s("chk_dev"), done && !dev ? L.s("chk_auto") : L.s("chk_dev_fix"),
                 L.s("chk_dev_btn"), v -> openAwayFromMe(new Intent(android.provider.Settings.ACTION_DEVICE_INFO_SETTINGS)), L.s("chk_wifi_btn"), openDev);
         checkRow(wifi || done, L.s("chk_wifi"), done && !wifi ? L.s("chk_auto") : L.s("chk_wifi_fix"),
@@ -328,7 +353,7 @@ public class MainActivity extends Activity implements StreamClient.Listener {
     private void openSettingsIfPending() {
         if (!settingsPending) return;
         settingsPending = false;
-        Intent dev = new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS);
+        Intent dev = devSettingsIntent();
         Display top = otherDisplay(true), bottom = otherDisplay(false);
         if (top != null && bottom != null && (movedToTop || myDisplayId() == top.getDisplayId())) {
             openOnDisplay(dev, bottom.getDisplayId()); // explicit placement: app on top, settings on bottom
@@ -373,10 +398,21 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         if (i != null && i.getBooleanExtra(EXTRA_PAIRING, false) || PairingReceiver.active()) showPairBox();
     }
 
+    private int autoPort; // the pairing port last put into the field automatically
+
+    /** Every opening of the pairing window gets a new port: keep the field on the current one unless the user typed another. */
+    private void syncPortField(int p) {
+        String cur = portInput.getText().toString().trim();
+        if (cur.isEmpty() || cur.equals(String.valueOf(autoPort))) {
+            portInput.setText(p > 0 ? String.valueOf(p) : "");
+            autoPort = p;
+        }
+    }
+
     private void showPairBox() {
         if (pairBox == null) return;
         pairBox.setVisibility(View.VISIBLE);
-        if (PairingReceiver.port() > 0 && portInput.getText().length() == 0) portInput.setText(String.valueOf(PairingReceiver.port()));
+        syncPortField(PairingReceiver.port());
         scroll.post(() -> scroll.smoothScrollTo(0, setupCard.getTop()));
         codeInput.requestFocus();
         codeInput.post(() -> {
@@ -821,7 +857,7 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         setupCard.addView(pairBox);
         PairingReceiver.ui = (msg, p, done) -> {
             pairLive.setText(msg);
-            if (p > 0 && portInput.getText().length() == 0) portInput.setText(String.valueOf(p));
+            syncPortField(p);
             if (done) {
                 codeInput.setText("");
                 pairRequested = false;
@@ -837,6 +873,14 @@ public class MainActivity extends Activity implements StreamClient.Listener {
                 p = PairingReceiver.port();
             }
             PairingReceiver.pairAsync(this, p, codeInput.getText().toString());
+        });
+        // the code always has 6 digits: pair as soon as the last one is typed
+        codeInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable e) {
+                if (e.length() == 6) go.performClick();
+            }
         });
         bootStart = check(setupCard, L.s("boot_start"), settings.bootStart());
         bootStart.setOnCheckedChangeListener((b, on) -> settings.setBootStart(on));
