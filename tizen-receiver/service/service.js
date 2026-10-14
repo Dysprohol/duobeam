@@ -7,7 +7,7 @@
 //         GET /hello for receiver discovery, GET /status for diagnostics, POST/GET /report - player report
 var http = require('http');
 var net = require('net');
-var VERSION = '0.8.6';
+var VERSION = '0.8.7';
 var switchingUntil = 0; // after a layout-switch signal, a sender disconnect does not end the stream
 // type 3 (service -> player only) = sender disconnected
 var IN_PORT = 8201, OUT_PORT = 8202;
