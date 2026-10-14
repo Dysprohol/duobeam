@@ -94,17 +94,22 @@ var out = http.createServer(function (req, res) {
   res.setHeader('Content-Type', 'application/json');
   if (req.url === '/hello') {
     return res.end(JSON.stringify({ app: 'DuoBeam', role: 'receiver', version: VERSION, platform: 'tizen', ingestPort: IN_PORT, busy: stream.src > 0,
-      player: stream.player || 'mse' }));
+      player: stream.player || 'mse', maxVideo: stream.maxVideo || '' }));
   }
   if (req.url === '/status') {
-    return res.end(JSON.stringify({ player: stream.player || 'mse', version: VERSION, started: stream.started, src: stream.src, lastSrc: stream.lastSrc, sinks: stream.sinks.length,
+    // maxVideo early: the handheld app reads only the first 1 KB
+    return res.end(JSON.stringify({ player: stream.player || 'mse', version: VERSION, maxVideo: stream.maxVideo || '', started: stream.started, src: stream.src, lastSrc: stream.lastSrc, sinks: stream.sinks.length,
       frames: stream.frames, audio: stream.audio || 0, audioAvgBytes: stream.audioAvg || 0, bytes: stream.bytes, dropped: stream.dropped, hasInit: !!stream.init,
       clock: stream.clock || null, lastMark: stream.lastMark || null }));
   }
   if (req.url === '/report') {
     if (req.method === 'POST') { var b = ''; req.on('data', function (c) { b += c; }); req.on('end', function () {
       lastReport = b;
-      try { var p = JSON.parse(b).player; if (p) stream.player = p; } catch (e) {} // emss = PCM audio, mse = AAC/Opus
+      try {
+        var j = JSON.parse(b);
+        if (j.player) stream.player = j.player; // emss = PCM audio, mse = AAC/Opus
+        if (j.maxVideo) stream.maxVideo = j.maxVideo; // largest frame the TV takes, from the page
+      } catch (e) {}
       res.end('{"ok":true}'); }); return; }
     return res.end(lastReport || 'null');
   }

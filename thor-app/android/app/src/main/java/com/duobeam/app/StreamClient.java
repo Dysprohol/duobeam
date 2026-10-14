@@ -239,6 +239,8 @@ final class StreamClient {
 
     // receiver player: "emss" (low latency, audio must be PCM) or "mse" (AAC/Opus); empty = unknown
     private volatile String receiverPlayer = "";
+    // largest frame the receiver decodes, "WxH" from its /status; empty = not reported (receivers before 0.8.4)
+    private volatile String receiverMax = "";
 
     private String fetchTvStatus(int connectMs, int readMs) throws java.io.IOException {
         String host = settings.tv().split(":")[0];
@@ -252,6 +254,8 @@ final class StreamClient {
             String body = n > 0 ? new String(b, 0, n, "UTF-8") : "";
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"player\":\"(\\w+)\"").matcher(body);
             if (m.find()) receiverPlayer = m.group(1);
+            java.util.regex.Matcher mx = java.util.regex.Pattern.compile("\"maxVideo\":\"(\\d+x\\d+)\"").matcher(body);
+            receiverMax = mx.find() ? mx.group(1) : "";
             return body;
         }
     }
@@ -260,6 +264,7 @@ final class StreamClient {
     private String startArgs() {
         String args = settings.buildArgs();
         if ("emss".equals(receiverPlayer) || "android".equals(receiverPlayer)) args = args.replaceAll("acodec=\\w+", "acodec=pcm");
+        if (!receiverMax.isEmpty()) args += " maxsize=" + receiverMax;
         return args;
     }
 

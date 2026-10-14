@@ -34,7 +34,11 @@ setInterval(function () {
   }
 }, 20);
 function seekTo(t) { lastSeekAt = performance.now(); v.currentTime = t; }
-var S = { kind: 'player', started: new Date().toISOString(), frames: 0, keyframes: 0, audio: 0, bytes: 0, inits: 0, waiting: 0, seeks: 0,
+// largest frame for the sender (the service passes it on in /status): what the panel shows. QE43Q67C (4K) plays
+// 3160x1080 and 992x2160 but rejects 1080x2340 (2026-10-12). '' = unknown, the sender then uses its default.
+var MAX_VIDEO = '';
+try { MAX_VIDEO = webapis.productinfo.isUdPanelSupported() ? '3840x2160' : '1920x1080'; } catch (e) {}
+var S = { kind: 'player', maxVideo: MAX_VIDEO, started: new Date().toISOString(), frames: 0, keyframes: 0, audio: 0, bytes: 0, inits: 0, waiting: 0, seeks: 0,
   events: [], codec: null, aheadMs: null, errors: {}, recoveries: [], quota: 0, diag: null };
 var ms = null, sb = null, queue = [], jumped = false, t0 = performance.now(), hudOn = false;
 // waiting screen: visible until video arrives; shown again when the handheld stops sending

@@ -43,6 +43,7 @@ import java.util.Map;
  * Usage (as shell):
  *   CLASSPATH=/data/local/tmp/duobeam.jar app_process / com.duobeam.Sender tv=<TV-IP>:8201 layout=side
  * Options: bitrate=12000000 fps=60 iframe=2 wifilock=on|off codec=hevc audio=off|tv|both acodec=aac|opus|pcm avsync=<ms>
+ *          maxsize=<W>x<H> (largest frame the receiver decodes; bigger frames are scaled down, default 3840x2160)
  *
  * Daemon mode (controlled by the app over a local socket, every command prefixed with a token):
  *   ... com.duobeam.Sender daemon port=27500 token=XYZ
@@ -76,6 +77,10 @@ public final class Sender {
     // restart while streaming (e.g. layout change): TV gets a "switching" signal instead of "disconnected"
     private static volatile boolean switching;
 
+    /** Thrown out of the stream loop when a captured display changed size; the worker restarts the stream at once. */
+    private static final class DisplayChanged extends RuntimeException {
+    }
+
     public static synchronized void startAsync(final String argsLine) {
         switching = worker != null;
         stopAsync();
@@ -92,6 +97,10 @@ public final class Sender {
                     try {
                         run(argsLine.trim().split(" +"));
                         break;
+                    } catch (DisplayChanged d) {
+                        if (stopRequested) break;
+                        Ln.i("display size changed (rotation), restarting the stream with the new size");
+                        if (worker == Thread.currentThread()) status = "STARTING";
                     } catch (Throwable t) {
                         if (System.currentTimeMillis() - began > 30_000) attempts = 0; // ran long enough, reset the retry budget
                         if (stopRequested || ++attempts > 3) throw t;
@@ -333,7 +342,9 @@ public final class Sender {
         }
         Object wifiLock = "off".equals(opt("wifilock", "on")) ? null : acquireWifiLock();
 
-        DualCapture capture = new DualCapture(displayIds, layout, fps);
+        // maxsize=WxH: the largest frame the receiver's decoder takes (it reports it in /status); older receivers don't
+        String[] max = opt("maxsize", "3840x2160").split("x");
+        DualCapture capture = new DualCapture(displayIds, layout, fps, Integer.parseInt(max[0]), Integer.parseInt(max[1]));
         ThorAudio audio = null;
         MediaCodec codec = null;
         Size size;
@@ -412,7 +423,7 @@ public final class Sender {
         final long runStart = System.currentTimeMillis();
         // per-stage timing, logged every 10 s next to the frame counters
         final Stats encodeTime = new Stats(), sendTime = new Stats();
-        long lastMarkSlot = -1000;
+        long lastMarkSlot = -1000, lastDisplayCheck = System.currentTimeMillis();
 
         try {
             while (!stopRequested) {
@@ -442,6 +453,13 @@ public final class Sender {
                         status = "NO_TV " + tv[0] + ":" + tv[1] + " " + e.getMessage();
                         if (audio != null) audio.detach(); // no receiver: keep audio on the device
                     }
+                }
+
+                // a rotated phone screen changes the display size; the virtual display keeps the old one, so the picture
+                // would stay small inside the old frame until the stream restarts
+                if (System.currentTimeMillis() - lastDisplayCheck > 500) {
+                    lastDisplayCheck = System.currentTimeMillis();
+                    if (capture.displaysChanged()) throw new DisplayChanged();
                 }
 
                 if (keyRequested) {

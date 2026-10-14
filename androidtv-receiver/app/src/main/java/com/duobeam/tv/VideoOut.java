@@ -115,6 +115,33 @@ final class VideoOut {
         }
     }
 
+    private static volatile String maxSize;
+
+    /**
+     * Largest frame "WxH" the hardware HEVC decoder takes (widest width, tallest height at that width), reported to
+     * the sender so it scales bigger screens down instead of sending a stream this TV cannot decode; "" if unknown.
+     */
+    static String maxSize() {
+        if (maxSize != null) return maxSize;
+        String r = "";
+        for (MediaCodecInfo ci : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+            if (ci.isEncoder() || ci.getName().startsWith("OMX.google.") || ci.getName().startsWith("c2.android.")) continue;
+            for (String t : ci.getSupportedTypes()) {
+                if (!t.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) continue;
+                try {
+                    MediaCodecInfo.VideoCapabilities vc = ci.getCapabilitiesForType(t).getVideoCapabilities();
+                    int w = vc.getSupportedWidths().getUpper();
+                    r = w + "x" + vc.getSupportedHeightsFor(w).getUpper();
+                } catch (Exception ignored) {
+                }
+                if (!r.isEmpty()) break;
+            }
+            if (!r.isEmpty()) break;
+        }
+        Log.i(TAG, "decoder limit " + (r.isEmpty() ? "unknown" : r));
+        return maxSize = r;
+    }
+
     private static String pickDecoder(int w, int h) {
         String fallback = null;
         for (MediaCodecInfo ci : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {

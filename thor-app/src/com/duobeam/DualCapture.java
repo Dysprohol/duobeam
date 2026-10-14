@@ -75,7 +75,9 @@ final class DualCapture {
     final Stats latch = new Stats(); // source buffer produced -> drawn into the output frame
     volatile int skippedBuffers, badTimestamps;
 
-    DualCapture(int[] displayIds, String layout, int fps) {
+    DualCapture(int[] displayIds, String layout, int fps, int maxW, int maxH) {
+        this.maxW = maxW;
+        this.maxH = maxH;
         sources = new Source[displayIds.length];
         for (int i = 0; i < displayIds.length; i++) sources[i] = new Source(displayIds[i]);
         this.layout = layout;
@@ -125,8 +127,36 @@ final class DualCapture {
                 }
             }
         }
+        fitTvLimit(sources);
         Ln.i("layout " + layout + " -> " + outSize.getWidth() + "x" + outSize.getHeight());
         return outSize;
+    }
+
+    /** True when a captured display no longer has the size it had in prepare(), e.g. a phone was rotated. */
+    boolean displaysChanged() {
+        for (Source s : sources) {
+            DisplayInfo i = ServiceManager.getDisplayManager().getDisplayInfo(s.displayId);
+            if (i != null && !i.getSize().equals(s.size)) return true;
+        }
+        return false;
+    }
+
+    // Samsung's low-latency player rejects a 1080x2340 portrait phone screen ("resolution is invalid", QE43Q67C,
+    // 2026-10-12) while 3160x1080 plays, so frames larger than the receiver's decoder limit are scaled down to fit
+    private final int maxW, maxH;
+
+    private void fitTvLimit(Source[] all) {
+        double f = Math.min((double) maxW / outSize.getWidth(), (double) maxH / outSize.getHeight());
+        if (f >= 1) return;
+        int w = (int) (outSize.getWidth() * f) / 16 * 16, h = (int) (outSize.getHeight() * f) / 16 * 16;
+        double fx = (double) w / outSize.getWidth(), fy = (double) h / outSize.getHeight();
+        for (Source s : all) {
+            if (s.dst == null) continue;
+            s.dst = new Rect((int) Math.round(s.dst.left * fx), (int) Math.round(s.dst.top * fy),
+                    (int) Math.round(s.dst.right * fx), (int) Math.round(s.dst.bottom * fy));
+        }
+        Ln.i("frame " + outSize.getWidth() + "x" + outSize.getHeight() + " scaled to " + w + "x" + h + " (receiver limit " + maxW + "x" + maxH + ")");
+        outSize = new Size(w, h);
     }
 
     void start(Surface encoderSurface) throws Exception {

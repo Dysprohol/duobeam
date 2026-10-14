@@ -195,9 +195,10 @@ final class StreamServer {
             // "player":"android" -> the handheld app sends audio as PCM (no decoder delay)
             if (path.startsWith("/hello")) {
                 body = "{\"app\":\"DuoBeam\",\"role\":\"receiver\",\"version\":\"" + version + "\",\"platform\":\"androidtv\",\"ingestPort\":"
-                        + IN_PORT + ",\"busy\":" + busy + ",\"player\":\"android\"}";
+                        + IN_PORT + ",\"busy\":" + busy + ",\"player\":\"android\",\"maxVideo\":\"" + VideoOut.maxSize() + "\"}";
             } else if (path.startsWith("/status")) {
-                body = "{\"player\":\"android\",\"version\":\"" + version + "\",\"src\":" + (busy ? 1 : 0) + ",\"frames\":" + frames + extraStatus + "}";
+                // maxVideo early: the handheld app reads only the first 1 KB
+                body = "{\"player\":\"android\",\"version\":\"" + version + "\",\"maxVideo\":\"" + VideoOut.maxSize() + "\",\"src\":" + (busy ? 1 : 0) + ",\"frames\":" + frames + extraStatus + "}";
             } else {
                 code = 404;
                 body = "{\"error\":\"not found\"}";
