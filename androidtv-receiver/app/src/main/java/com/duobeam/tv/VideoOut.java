@@ -40,8 +40,12 @@ final class VideoOut {
     // frames handed to the decoder but not shown yet; some TV decoders work through everything they are given
     // before showing the newest frame, so fewer in flight = less delay (0 = no limit)
     static volatile int maxInFlight = 2;
-    private int inFlight;
-    private long lastOutputAt;
+    private static final int MAX_CAP = 16;
+    private int inFlight, capBoost;
+    private long lastSilenceAt;
+    private final ArrayDeque<Long> silences = new ArrayDeque<>();
+    private volatile long lastOutputAt = System.currentTimeMillis(), lastInputAt;
+    private volatile boolean failed;
     private long backlogSince;
 
     private static final class Frame {
@@ -75,43 +79,93 @@ final class VideoOut {
     private final byte[] csd;
     volatile int shown, dropped, maxQueue, catchUps;
 
-    private VideoOut(MediaCodec codec, HandlerThread thread, int width, int height, byte[] csd, Listener l) {
+    private VideoOut(MediaCodec codec, HandlerThread thread, int width, int height, byte[] csd, Listener l, String name, int level,
+                     boolean lowLatencyFeature) {
         this.codec = codec;
         this.thread = thread;
         this.width = width;
         this.height = height;
         this.csd = csd;
         this.listener = l;
+        this.name = name;
+        this.level = level;
+        this.lowLatencyFeature = lowLatencyFeature;
     }
 
+    // Decoder setup levels, tried from the first one the caller asks for; a level that fails to configure, or a decoder
+    // that then stalls (see stalled()), moves on to the next. Same order as Moonlight's MediaCodecHelper: vendor
+    // low-latency keys can stop a decoder's output entirely ("vdec-lowlatency" on an Amlogic Xiaomi box) and
+    // KEY_LOW_LATENCY made c2.amlogic HEVC a slideshow on Android TV 14 (moonlight-android #1584).
+    static final int LEVEL_FULL = 0, LEVEL_STANDARD = 1, LEVEL_PLAIN = 2;
+    final String name;
+    final int level;
+    private final boolean lowLatencyFeature;
+
     /** Null if no decoder on this device can handle the size (message for the user in error[0]). */
-    static VideoOut create(Mp4.Init init, Surface surface, Listener l, String[] error) {
-        String name = pickDecoder(init.width, init.height);
-        if (name == null) {
+    static VideoOut create(Mp4.Init init, Surface surface, Listener l, String[] error, int firstLevel) {
+        MediaCodecInfo info = pickDecoder(init.width, init.height);
+        if (info == null) {
             error[0] = "no HEVC decoder for " + init.width + "x" + init.height;
             return null;
         }
-        HandlerThread ht = new HandlerThread("DuoBeamTV-video");
-        ht.start();
+        boolean llFeature = hasLowLatencyFeature(info);
+        Exception last = null;
+        for (int level = Math.max(LEVEL_FULL, Math.min(LEVEL_PLAIN, firstLevel)); level <= LEVEL_PLAIN; level++) {
+            HandlerThread ht = new HandlerThread("DuoBeamTV-video");
+            ht.start();
+            MediaCodec c = null;
+            try {
+                c = MediaCodec.createByCodecName(info.getName());
+                VideoOut v = new VideoOut(c, ht, init.width, init.height, init.csd, l, info.getName(), level, llFeature);
+                c.setCallback(v.callback, new Handler(ht.getLooper()));
+                MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_HEVC, init.width, init.height);
+                f.setByteBuffer("csd-0", ByteBuffer.wrap(init.csd));
+                applyLevel(f, info.getName(), level);
+                c.configure(f, surface, null, 0);
+                c.setOnFrameRenderedListener((codec, pts, renderNs) -> v.onRendered(pts, renderNs), new Handler(ht.getLooper()));
+                c.start();
+                Log.i(TAG, "decoder " + info.getName() + " " + init.width + "x" + init.height + " setup level " + level
+                        + (llFeature ? " (FEATURE_LowLatency)" : ""));
+                return v;
+            } catch (Exception e) {
+                last = e;
+                Log.w(TAG, "decoder " + info.getName() + " level " + level + " failed: " + e);
+                if (c != null) c.release();
+                ht.quitSafely();
+            }
+        }
+        error[0] = "decoder: " + last;
+        return null;
+    }
+
+    private static void applyLevel(MediaFormat f, String name, int level) {
+        if (level >= LEVEL_PLAIN) return;
+        if (Build.VERSION.SDK_INT >= 30) f.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
+        // Moonlight stops here when the decoder reports FEATURE_LowLatency. The Xiaomi MiTV-MOOQ0 decoder reports it,
+        // yet side by side (3160x1080) it was slower with only this key: 163-167 ms, 50 ms decoding (2026-10-14),
+        // against 80-92 ms with the vendor key and realtime priority in 0.8.4, so level 0 always adds them.
+        if (level >= LEVEL_STANDARD) return;
+        f.setInteger(MediaFormat.KEY_PRIORITY, 0); // realtime
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        if (n.contains("amlogic")) {
+            f.setInteger("vendor.low-latency.enable", 1);
+        } else if (n.contains("mtk") || n.contains("mediatek") || n.startsWith("omx.ms.") || n.contains("amazon")) {
+            f.setInteger("vdec-lowlatency", 1); // MediaTek, MStar (Xiaomi MiTV-MOOQ0 plays with it) and Fire OS
+        } else if (n.contains("qcom") || n.contains("qti")) {
+            f.setInteger("vendor.qti-ext-dec-low-latency.enable", 1);
+            f.setInteger("vendor.qti-ext-dec-picture-order.enable", 1);
+        } else if (n.contains("exynos")) {
+            f.setInteger("vendor.rtc-ext-dec-low-latency.enable", 1);
+        }
+    }
+
+    private static boolean hasLowLatencyFeature(MediaCodecInfo info) {
+        if (Build.VERSION.SDK_INT < 30) return false;
         try {
-            MediaCodec c = MediaCodec.createByCodecName(name);
-            VideoOut v = new VideoOut(c, ht, init.width, init.height, init.csd, l);
-            c.setCallback(v.callback, new Handler(ht.getLooper()));
-            MediaFormat f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_HEVC, init.width, init.height);
-            f.setByteBuffer("csd-0", ByteBuffer.wrap(init.csd));
-            if (Build.VERSION.SDK_INT >= 30) f.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
-            f.setInteger(MediaFormat.KEY_PRIORITY, 0); // realtime
-            f.setInteger("vdec-lowlatency", 1); // some vendor decoders (Amlogic/MTK) read this
-            c.configure(f, surface, null, 0);
-            c.setOnFrameRenderedListener((codec, pts, renderNs) -> v.onRendered(pts, renderNs), new Handler(ht.getLooper()));
-            c.start();
-            Log.i(TAG, "decoder " + name + " " + init.width + "x" + init.height);
-            return v;
+            return info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_HEVC)
+                    .isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency);
         } catch (Exception e) {
-            error[0] = "decoder: " + e;
-            Log.w(TAG, "decoder", e);
-            ht.quitSafely();
-            return null;
+            return false;
         }
     }
 
@@ -138,12 +192,47 @@ final class VideoOut {
             }
             if (!r.isEmpty()) break;
         }
-        Log.i(TAG, "decoder limit " + (r.isEmpty() ? "unknown" : r));
+        Log.i(TAG, "decoder limit " + (r.isEmpty() ? "unknown" : r) + ", max pixels " + maxPixels());
         return maxSize = r;
     }
 
-    private static String pickDecoder(int w, int h) {
-        String fallback = null;
+    private static volatile long maxPixels = -1;
+
+    /**
+     * Largest frame area (luma samples) of the highest HEVC Main level the hardware decoder lists, from the H.265
+     * level table; 0 if unknown. Level 4.1, the usual limit of 1080p-only devices, allows 2,228,224: less than
+     * 3160x1080 (3,412,800) or a 1080x2340 phone screen, which a box limit alone does not catch.
+     */
+    static long maxPixels() {
+        if (maxPixels >= 0) return maxPixels;
+        int best = 0;
+        for (MediaCodecInfo ci : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+            if (ci.isEncoder() || ci.getName().startsWith("OMX.google.") || ci.getName().startsWith("c2.android.")) continue;
+            for (String t : ci.getSupportedTypes()) {
+                if (!t.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) continue;
+                try {
+                    for (MediaCodecInfo.CodecProfileLevel pl : ci.getCapabilitiesForType(t).profileLevels) {
+                        if (pl.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain) best = Math.max(best, pl.level);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (best > 0) break;
+        }
+        // level constants are one bit per level and tier, in increasing order
+        long r;
+        if (best == 0) r = 0;
+        else if (best <= MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel3) r = 552_960;
+        else if (best <= MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel31) r = 983_040;
+        else if (best <= MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel41) r = 2_228_224;
+        else if (best <= MediaCodecInfo.CodecProfileLevel.HEVCHighTierLevel52) r = 8_912_896;
+        else r = 35_651_584;
+        return maxPixels = r;
+    }
+
+    /** Hardware decoder that reports low latency first, then any hardware one, then software. */
+    private static MediaCodecInfo pickDecoder(int w, int h) {
+        MediaCodecInfo hw = null, sw = null;
         for (MediaCodecInfo ci : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
             if (ci.isEncoder()) continue;
             for (String t : ci.getSupportedTypes()) {
@@ -154,12 +243,17 @@ final class VideoOut {
                 } catch (Exception e) {
                     continue;
                 }
-                boolean sw = ci.getName().startsWith("OMX.google.") || ci.getName().startsWith("c2.android.");
-                if (!sw) return ci.getName(); // hardware first
-                if (fallback == null) fallback = ci.getName();
+                boolean soft = ci.getName().startsWith("OMX.google.") || ci.getName().startsWith("c2.android.");
+                if (soft) {
+                    if (sw == null) sw = ci;
+                } else if (hasLowLatencyFeature(ci)) {
+                    return ci;
+                } else if (hw == null) {
+                    hw = ci;
+                }
             }
         }
-        return fallback;
+        return hw != null ? hw : sw;
     }
 
     private final MediaCodec.Callback callback = new MediaCodec.Callback() {
@@ -199,6 +293,7 @@ final class VideoOut {
         @Override
         public void onError(MediaCodec c, MediaCodec.CodecException e) {
             Log.w(TAG, "decoder error: " + e);
+            failed = true; // stalled() reports it; the receiver then recreates the decoder
         }
 
         @Override
@@ -242,11 +337,68 @@ final class VideoOut {
         if (askKey) listener.onNeedKeyframe();
     }
 
+    /** Current limit of frames inside the decoder (0 = none). */
+    int cap() {
+        return maxInFlight > 0 ? Math.min(MAX_CAP, maxInFlight + capBoost) : 0;
+    }
+
+    /**
+     * Frames go in but nothing comes out for 1.5 s, or the decoder reported an error: the receiver then recreates it
+     * at the next setup level and asks for a keyframe.
+     */
+    boolean stalled() {
+        long now = System.currentTimeMillis();
+        return failed || (lastInputAt != 0 && now - lastInputAt < 1000 && now - lastOutputAt > 1500) || slideshow(now);
+    }
+
+    private long rateAt;
+    private int rateIn, rateOut, slowWindows;
+    private volatile int queuedTotal;
+
+    // Frames go in at ~60 per second but fewer than 20 come out, for two 2-second windows in a row: the decoder
+    // runs but far too slowly, the "slideshow" KEY_LOW_LATENCY gave c2.amlogic HEVC on Android TV 14
+    // (moonlight-android #1584). Counts as a stall, so the next setup level drops the low-latency keys.
+    private boolean slideshow(long now) {
+        if (rateAt == 0) {
+            rateAt = now;
+            rateIn = queuedTotal;
+            rateOut = shown;
+            return false;
+        }
+        if (now - rateAt < 2000) return false;
+        double secs = (now - rateAt) / 1000.0, in = (queuedTotal - rateIn) / secs, out = (shown - rateOut) / secs;
+        rateAt = now;
+        rateIn = queuedTotal;
+        rateOut = shown;
+        slowWindows = in >= 45 && out < 20 ? slowWindows + 1 : 0;
+        return slowWindows >= 2;
+    }
+
     // under lock
     private void feed() {
-        int cap = maxInFlight;
-        // safety: decoder silent for a while (e.g. it swallowed a frame) - don't stay blocked on the count
-        if (cap > 0 && inFlight >= cap && System.currentTimeMillis() - lastOutputAt > 200) inFlight = 0;
+        int cap = cap();
+        long now = System.currentTimeMillis();
+        // Decoder silent for 200 ms with the limit reached. Once in a while that is a hiccup; 3 times within a second
+        // means it holds more frames than allowed before giving one back, and with a fixed limit it got one frame per
+        // 200 ms, a nearly frozen picture. Then the limit goes up, and back down after 10 s without such a silence:
+        // raising it on every hiccup kept 4 frames in the Xiaomi MiTV-MOOQ0 decoder, 210 ms instead of ~90 (2026-10-14).
+        if (cap > 0 && inFlight >= cap && now - Math.max(lastOutputAt, lastSilenceAt) > 200) {
+            lastSilenceAt = now;
+            silences.add(now);
+            while (now - silences.peekFirst() > 1000) silences.poll();
+            if (silences.size() >= 3 && cap < MAX_CAP) {
+                capBoost++;
+                silences.clear();
+                Log.i(TAG, "decoder " + name + " keeps holding " + inFlight + " frames without output, limit now " + cap());
+            }
+            inFlight = 0;
+            cap = cap();
+        } else if (capBoost > 0 && now - lastSilenceAt > 10_000) {
+            capBoost--;
+            lastSilenceAt = now;
+            Log.i(TAG, "decoder " + name + " no longer holds frames, limit now " + cap());
+            cap = cap();
+        }
         while (running && !freeInputs.isEmpty() && !queue.isEmpty() && (cap <= 0 || inFlight < cap)) {
             int idx = freeInputs.poll();
             Frame f = queue.poll();
@@ -256,10 +408,12 @@ final class VideoOut {
                 in.put(f.data);
                 codec.queueInputBuffer(idx, 0, f.data.length, f.pts, f.key ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0);
                 inFlight++;
-                long now = System.nanoTime();
-                waitTime.add((now - f.arrivedNs) / 1e6);
+                queuedTotal++;
+                lastInputAt = System.currentTimeMillis();
+                long nowNs = System.nanoTime();
+                waitTime.add((nowNs - f.arrivedNs) / 1e6);
                 if (queuedAt.size() > 64) queuedAt.clear();
-                queuedAt.put(f.pts, now);
+                queuedAt.put(f.pts, nowNs);
             } catch (Exception e) {
                 Log.w(TAG, "queue: " + e);
             }

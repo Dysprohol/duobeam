@@ -39,6 +39,7 @@ final class StreamServer {
     private volatile DataOutputStream sourceOut;
     volatile long frames;
     volatile String extraStatus = ""; // latency meter fields appended to /status (JSON members with a leading comma)
+    volatile String problem = ""; // what failed after the automatic fixes ("decoder"), shown by the handheld app
     // clock sync with the sender: offset = senderTime - tvTime, from the lowest-RTT ping of the last 15
     private final ArrayDeque<double[]> clock = new ArrayDeque<>();
     volatile double clockOffset = Double.NaN, clockRtt = Double.NaN;
@@ -195,10 +196,14 @@ final class StreamServer {
             // "player":"android" -> the handheld app sends audio as PCM (no decoder delay)
             if (path.startsWith("/hello")) {
                 body = "{\"app\":\"DuoBeam\",\"role\":\"receiver\",\"version\":\"" + version + "\",\"platform\":\"androidtv\",\"ingestPort\":"
-                        + IN_PORT + ",\"busy\":" + busy + ",\"player\":\"android\",\"maxVideo\":\"" + VideoOut.maxSize() + "\"}";
+                        + IN_PORT + ",\"busy\":" + busy + ",\"player\":\"android\",\"maxVideo\":\"" + VideoOut.maxSize()
+                        + "\",\"maxPixels\":" + VideoOut.maxPixels() + "}";
             } else if (path.startsWith("/status")) {
                 // maxVideo early: the handheld app reads only the first 1 KB
-                body = "{\"player\":\"android\",\"version\":\"" + version + "\",\"maxVideo\":\"" + VideoOut.maxSize() + "\",\"src\":" + (busy ? 1 : 0) + ",\"frames\":" + frames + extraStatus + "}";
+                body = "{\"player\":\"android\",\"version\":\"" + version + "\",\"maxVideo\":\"" + VideoOut.maxSize() + "\",\"maxPixels\":" + VideoOut.maxPixels()
+                        // no "screen": Android TV display modes report the UI resolution (1920x1080 on the Xiaomi
+                        // MiTV-MOOQ0, an HDR set), not what the video layer of a 4K panel shows
+                        + ",\"problem\":\"" + problem + "\",\"src\":" + (busy ? 1 : 0) + ",\"frames\":" + frames + extraStatus + "}";
             } else {
                 code = 404;
                 body = "{\"error\":\"not found\"}";

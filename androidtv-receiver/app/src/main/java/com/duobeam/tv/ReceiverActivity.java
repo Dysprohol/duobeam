@@ -60,6 +60,11 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
         t("flag", "EN", "PL");
         t("nodecoder", "This device can't play this picture size (%s). On the handheld pick another layout (e.g. top screen only).",
                 "To urządzenie nie odtworzy obrazu tego rozmiaru (%s). Na konsoli wybierz inny układ (np. tylko górny ekran).");
+        t("dec_restart", "Picture restarted: the decoder stopped (setup %d)", "Obraz uruchomiony ponownie: dekoder stanął (ustawienie %d)");
+        t("dec_trouble", "This TV's decoder keeps stopping with this stream. On the handheld pick another layout or lower quality. "
+                        + "Still stuck? Press OK and send a photo of the info box to the DuoBeam developer.",
+                "Dekoder tego telewizora ciągle staje przy tym obrazie. Na konsoli wybierz inny układ albo niższą jakość. "
+                        + "Dalej nie działa? Naciśnij OK i wyślij zdjęcie okienka z informacjami twórcy DuoBeam.");
         t("receiver", "receiver", "odbiornik");
         t("delay", "delay", "opóźnienie");
     }
@@ -380,6 +385,11 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
                 byte[] init = new byte[p.length - nl - 1];
                 System.arraycopy(p, nl + 1, init, 0, init.length);
                 releaseMedia();
+                // a new stream starts its own delay figures (the old samples mixed two streams in the HUD and /status)
+                marks.clear();
+                synchronized (lat) {
+                    lat.clear();
+                }
                 if (surface == null) {
                     pendingCodec = codec;
                     pendingInit = init;
@@ -442,7 +452,9 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
             return;
         }
         String[] err = new String[1];
-        VideoOut v = VideoOut.create(in, sf, this, err);
+        curCodec = codec;
+        curInit = init;
+        VideoOut v = VideoOut.create(in, sf, this, err, decoderLevel);
         video = v;
         if (codec.contains(",pcm")) audio = new AudioOut();
         main.post(() -> {
@@ -453,6 +465,42 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
             }
             fitVideo(in.width, in.height);
         });
+    }
+
+    // decoder setup level that worked on this TV (VideoOut.LEVEL_*); kept while the app runs so a new stream does not
+    // stall again before finding it
+    private static volatile int decoderLevel = VideoOut.LEVEL_FULL;
+    private volatile String curCodec;
+    private volatile byte[] curInit;
+    private long lastRecoverAt;
+    private int recoveries;
+    // restarts in the last minute; 3 or more = the automatic fixes did not help, so the TV says so plainly
+    private final java.util.ArrayDeque<Long> recoverTimes = new java.util.ArrayDeque<>();
+    private boolean decoderTrouble;
+
+    private void showToast(String msg) {
+        hud.setText(msg);
+        hud.setVisibility(View.VISIBLE);
+        hud.bringToFront();
+        toastUntil = System.currentTimeMillis() + 3000;
+    }
+
+    /** The decoder stopped giving frames back: recreate it at the next setup level and ask for a fresh keyframe. */
+    private void recoverDecoder(VideoOut v, long now) {
+        if (now - lastRecoverAt < 3000 || curInit == null) return;
+        lastRecoverAt = now;
+        recoveries++;
+        recoverTimes.add(now);
+        decoderLevel = Math.min(VideoOut.LEVEL_PLAIN, v.level + 1);
+        showToast(String.format(s("dec_restart"), decoderLevel));
+        android.util.Log.w("DuoBeamTV", "decoder " + v.name + " stalled at setup level " + v.level + ", recreating at level " + decoderLevel);
+        final String codec = curCodec;
+        final byte[] init = curInit;
+        new Thread(() -> {
+            releaseMedia();
+            startMedia(codec, init);
+            server.requestKeyframe();
+        }, "DuoBeamTV-recover").start();
     }
 
     private void releaseMedia() {
@@ -529,7 +577,16 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
         @Override
         public void run() {
             long now = System.currentTimeMillis();
-            if (now >= toastUntil && !hudOn && hud.getVisibility() == View.VISIBLE) hud.setVisibility(View.GONE); // mode toast over
+            while (!recoverTimes.isEmpty() && now - recoverTimes.peekFirst() > 60_000) recoverTimes.pollFirst();
+            decoderTrouble = recoverTimes.size() >= 3;
+            server.problem = decoderTrouble ? "decoder" : "";
+            if (decoderTrouble && !hudOn && now >= toastUntil) { // stays until a minute passes without a restart
+                hud.setText(s("dec_trouble"));
+                hud.setVisibility(View.VISIBLE);
+                hud.bringToFront();
+            } else if (now >= toastUntil && !hudOn && hud.getVisibility() == View.VISIBLE) {
+                hud.setVisibility(View.GONE); // mode toast over
+            }
             if (playing && server.connected() && now - lastFrameAt > 3000) { // stream stalled
                 playing = false;
                 showVideo(false);
@@ -537,6 +594,7 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
             }
             if (switching.getVisibility() == View.VISIBLE && now > switchingUntil && !playing) switching.setVisibility(View.GONE);
             VideoOut v = video;
+            if (v != null && v.stalled()) recoverDecoder(v, now);
             String tvStages = v == null ? null : v.waitTime.line() + " / " + v.decodeTime.line() + " / " + (v.renderCallbacks ? v.renderTime.line() : "-");
             String latJson = "null";
             synchronized (lat) {
@@ -548,7 +606,9 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
             }
             server.extraStatus = ",\"lat\":" + latJson + ",\"tvStages\":" + (tvStages == null ? "null" : "\"" + tvStages + "\"")
                     + ",\"renderCallbacks\":" + (v != null && v.renderCallbacks) + ",\"shown\":" + (v == null ? 0 : v.shown)
-                    + ",\"rendered\":" + (v == null ? 0 : v.rendered) + ",\"display\":\"" + displayInfo() + "\"";
+                    + ",\"rendered\":" + (v == null ? 0 : v.rendered) + ",\"display\":\"" + displayInfo() + "\""
+                    + ",\"decoder\":" + (v == null ? "null" : "{\"name\":\"" + v.name + "\",\"level\":" + v.level + ",\"cap\":" + v.cap() + "}")
+                    + ",\"recoveries\":" + recoveries;
             if (now < toastUntil) {
                 // mode toast stays for a moment
             } else if (hudOn) {
@@ -566,6 +626,8 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
                     }
                 }
                 if (tvStages != null) sb.append("\nTV wait / decode / render p50/p95/max ").append(tvStages);
+                if (v != null) sb.append("\ndecoder ").append(v.name).append("  setup ").append(v.level).append("  in decoder ")
+                        .append(v.cap() == 0 ? "no limit" : "max " + v.cap()).append(recoveries > 0 ? "  restarts " + recoveries : "");
                 if (v != null) {
                     sb.append("\ndropped ").append(v.dropped).append("  queue max ").append(v.maxQueue).append("  catch-ups ").append(v.catchUps);
                     v.maxQueue = 0;
