@@ -17,7 +17,7 @@ var I18N = {
     switching: 'Zmieniam układ...',
     modes: ['najmniejsze opóźnienie', 'zrównoważony', 'najpłynniejszy'], mode: 'Tryb', frames: 'klatki', buffer: 'bufor', receiver: 'odbiornik', latency: 'opóźnienie' }
 };
-var RECEIVER_VERSION = '0.8.3';
+var RECEIVER_VERSION = '0.8.4';
 var lang = 'en';
 try { lang = localStorage.getItem('duobeam.lang') === 'pl' ? 'pl' : 'en'; } catch (e) {}
 function tr(k) { return I18N[lang][k]; }
