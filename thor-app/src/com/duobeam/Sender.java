@@ -69,6 +69,7 @@ public final class Sender {
 
     // --- start/stop/status, driven by the daemon commands below ---
     private static volatile boolean stopRequested;
+    private static volatile int generation; // bumped by every stop; a stream loop runs only in the generation it started in
     // machine-readable status; the app localizes it:
     // STOPPED | STARTING | CONNECTED <tv> | NO_TV <tv> <error> | STREAMING <layout> <w>x<h> <fps> <frames> <wifilock 0/1> | ERROR <details>
     private static volatile String status = "STOPPED";
@@ -129,6 +130,12 @@ public final class Sender {
 
     public static synchronized void stopAsync() {
         stopRequested = true;
+        // A worker that outlives the 8 s join (e.g. blocked in send()) used to come back to life when the next start
+        // cleared stopRequested, and kept the encoder; a stopped generation stays stopped. Closing the socket also
+        // unblocks a send to a TV that no longer answers.
+        generation++;
+        Socket s = liveSock;
+        if (s != null) closeQuietly(s);
         if (!switching) ScreenPower.restoreAll();
         if (worker != null) {
             try {
@@ -444,8 +451,9 @@ public final class Sender {
         final Stats encodeTime = new Stats(), sendTime = new Stats();
         long lastMarkSlot = -1000, lastDisplayCheck = System.currentTimeMillis();
 
+        final int myGeneration = generation;
         try {
-            while (!stopRequested) {
+            while (!stopRequested && myGeneration == generation) {
                 // connect to the TV (retry every 1 s); on connect send init and force a key frame
                 if (out == null && System.currentTimeMillis() - lastConnectTry > 1000) {
                     lastConnectTry = System.currentTimeMillis();
@@ -455,6 +463,8 @@ public final class Sender {
                         s.setSendBufferSize(192 * 1024); // small kernel queue so congestion shows up immediately as frame age
                         s.connect(new InetSocketAddress(tv[0], Integer.parseInt(tv[1])), 2000);
                         sock = s;
+                        liveSock = s;
+                        watchSends();
                         out = new DataOutputStream(new BufferedOutputStream(s.getOutputStream(), 1 << 20));
                         Ln.i("connected to TV " + tv[0] + ":" + tv[1]);
                         status = "CONNECTED " + tv[0];
@@ -614,16 +624,13 @@ public final class Sender {
                 }
             }
             if (sock != null) {
-                try {
-                    sock.close();
-                } catch (IOException ignored) {
-                }
+                if (liveSock == sock) liveSock = null;
+                closeQuietly(sock);
             }
             cleanup(codec, capture, audio, wifiLock);
         }
     }
 
-    /** Releases everything even if a step throws; the hardware encoder goes first since only one instance of this size is available. */
     private static MediaFormat encoderFormat(int w, int h, int bitrate, int fps, int iframe) {
         MediaFormat format = new MediaFormat();
         format.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_HEVC);
@@ -654,6 +661,7 @@ public final class Sender {
         }
     }
 
+    /** Releases everything even if a step throws; the hardware encoder goes first since only one instance of this size is available. */
     private static void cleanup(MediaCodec codec, DualCapture capture, ThorAudio audio, Object wifiLock) {
         if (codec != null) {
             try { codec.stop(); } catch (Throwable e) { Ln.w("codec stop: " + e); }
@@ -676,6 +684,9 @@ public final class Sender {
                 DataOutputStream o = new DataOutputStream(new BufferedOutputStream(s.getOutputStream(), 64));
                 while (true) {
                     int len = in.readInt();
+                    // the TV only sends small messages; a bad length used to throw NegativeArraySizeException (0) or
+                    // allocate up to 2 GB
+                    if (len < 1 || len > 1 << 16) throw new IOException("bad message length " + len);
                     int type = in.readUnsignedByte();
                     byte[] p = new byte[len - 1];
                     in.readFully(p);
@@ -695,10 +706,50 @@ public final class Sender {
 
     private static void send(DataOutputStream out, int type, byte[] payload) throws IOException {
         synchronized (SEND_LOCK) { // video and audio are sent from different threads; messages must not interleave
-            out.writeInt(payload.length + 1);
-            out.writeByte(type);
-            out.write(payload);
-            out.flush();
+            sendSince = System.currentTimeMillis();
+            try {
+                out.writeInt(payload.length + 1);
+                out.writeByte(type);
+                out.write(payload);
+                out.flush();
+            } finally {
+                sendSince = 0;
+            }
+        }
+    }
+
+    // A TV that vanished without closing the connection (power cut, Wi-Fi gone) leaves send() blocked once the socket
+    // buffer is full, and nothing else ever unblocked it. Closing the socket makes the write fail, so the stream
+    // reconnects; Stop does the same.
+    private static volatile Socket liveSock;
+    private static volatile long sendSince;
+    private static Thread sendWatchdog;
+
+    private static synchronized void watchSends() {
+        if (sendWatchdog != null) return;
+        sendWatchdog = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                long since = sendSince;
+                Socket s = liveSock;
+                if (since != 0 && s != null && System.currentTimeMillis() - since > 5000) {
+                    Ln.w("send blocked for " + (System.currentTimeMillis() - since) / 1000 + " s, closing the connection to the TV");
+                    closeQuietly(s);
+                }
+            }
+        }, "DuoBeamSendWatch");
+        sendWatchdog.setDaemon(true);
+        sendWatchdog.start();
+    }
+
+    private static void closeQuietly(Socket s) {
+        try {
+            s.close();
+        } catch (IOException ignored) {
         }
     }
 }
