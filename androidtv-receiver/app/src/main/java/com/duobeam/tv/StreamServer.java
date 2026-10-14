@@ -49,15 +49,21 @@ final class StreamServer {
         this.version = version;
     }
 
+    private volatile long lastDataAt;
+    private Thread pingThread;
+
     void start() {
         running = true;
         new Thread(this::ingestLoop, "DuoBeamTV-ingest").start();
         new Thread(this::httpLoop, "DuoBeamTV-http").start();
-        new Thread(this::pingLoop, "DuoBeamTV-ping").start();
+        pingThread = new Thread(this::pingLoop, "DuoBeamTV-ping");
+        pingThread.start();
     }
 
     void stop() {
         running = false;
+        // the ping loop sleeps 1 s between pings; a quick stop/start (leaving and reopening the app) left two running
+        if (pingThread != null) pingThread.interrupt();
         closeQuietly(ingest);
         closeQuietly(http);
         Socket s = source;
@@ -75,7 +81,15 @@ final class StreamServer {
             while (running) {
                 Socket s = ss.accept();
                 Socket old = source;
-                if (old != null) closeQuietly(old); // newest sender wins (e.g. the handheld restarted the stream)
+                // A second handheld while one is streaming is turned away: with "newest wins" two senders kept
+                // replacing each other and the picture flickered (seen 2026-10-12). The same handheld reconnecting
+                // (stream restart) still replaces its old connection.
+                if (old != null && !old.getInetAddress().equals(s.getInetAddress()) && System.currentTimeMillis() - lastDataAt < 2000) {
+                    Log.i(TAG, "sender " + s.getInetAddress().getHostAddress() + " refused, " + old.getInetAddress().getHostAddress() + " is streaming");
+                    closeQuietly(s);
+                    continue;
+                }
+                if (old != null) closeQuietly(old);
                 new Thread(() -> serve(s), "DuoBeamTV-source").start();
             }
         } catch (IOException e) {
@@ -101,6 +115,7 @@ final class StreamServer {
                 int type = in.readUnsignedByte();
                 byte[] p = new byte[len - 1];
                 in.readFully(p);
+                lastDataAt = System.currentTimeMillis();
                 if (type == 9 && p.length == 16) {
                     onClockReply(p);
                     continue;

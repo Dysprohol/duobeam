@@ -193,12 +193,14 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
         surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder h) {
-                surface = h.getSurface();
-                if (pendingInit != null) {
-                    final byte[] init = pendingInit;
-                    final String codec = pendingCodec;
-                    pendingInit = null;
-                    new Thread(() -> startMedia(codec, init)).start();
+                synchronized (ReceiverActivity.this) { // see startMedia
+                    surface = h.getSurface();
+                    if (pendingInit != null) {
+                        final byte[] init = pendingInit;
+                        final String codec = pendingCodec;
+                        pendingInit = null;
+                        new Thread(() -> startMedia(codec, init)).start();
+                    }
                 }
             }
 
@@ -390,12 +392,14 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
                 synchronized (lat) {
                     lat.clear();
                 }
-                if (surface == null) {
-                    pendingCodec = codec;
-                    pendingInit = init;
-                    main.post(() -> videoBox.setVisibility(View.VISIBLE)); // creates the surface
-                } else {
-                    startMedia(codec, init);
+                synchronized (this) { // see startMedia
+                    if (surface == null) {
+                        pendingCodec = codec;
+                        pendingInit = init;
+                        main.post(() -> videoBox.setVisibility(View.VISIBLE)); // creates the surface
+                    } else {
+                        startMedia(codec, init);
+                    }
                 }
                 break;
             }
@@ -438,7 +442,9 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
         }
     }
 
-    private void startMedia(String codec, byte[] init) {
+    // The network thread, surfaceCreated and the decoder recovery all start or release the media; without one lock a
+    // stream arriving while the surface was being created could start two decoders or be left pending forever.
+    private synchronized void startMedia(String codec, byte[] init) {
         Surface sf = surface;
         if (sf == null) {
             pendingCodec = codec;
@@ -503,7 +509,7 @@ public class ReceiverActivity extends Activity implements StreamServer.Listener,
         }, "DuoBeamTV-recover").start();
     }
 
-    private void releaseMedia() {
+    private synchronized void releaseMedia() {
         VideoOut v = video;
         video = null;
         if (v != null) v.release();

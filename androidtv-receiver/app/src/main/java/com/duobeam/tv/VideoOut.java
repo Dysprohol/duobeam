@@ -421,7 +421,14 @@ final class VideoOut {
                 if (queuedAt.size() > 64) queuedAt.clear();
                 queuedAt.put(f.pts, nowNs);
             } catch (Exception e) {
+                // The slot was polled but never queued: give it back, or each failure leaves the decoder one input
+                // buffer short until none are left. The frame is lost, so later ones need a keyframe first.
                 Log.w(TAG, "queue: " + e);
+                freeInputs.addFirst(idx);
+                waitKey = true;
+                queue.clear();
+                listener.onNeedKeyframe(); // only writes a small request to the sender; takes no lock of ours
+                break;
             }
         }
     }
