@@ -140,13 +140,17 @@ final class VideoOut {
 
     private static void applyLevel(MediaFormat f, String name, int level) {
         if (level >= LEVEL_PLAIN) return;
-        if (Build.VERSION.SDK_INT >= 30) f.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        // c2.amlogic (newer Google TV devices) plays HEVC as a slideshow with KEY_LOW_LATENCY: moonlight-android #1584,
+        // and a Chromecast with Google TV 4K on DuoBeam 0.8.5 (2026-10-14): first frame, then a new one every few
+        // seconds, 2.3 s median decode. Its level 0 uses only the Amlogic key and priority.
+        boolean c2Amlogic = n.startsWith("c2.amlogic");
+        if (Build.VERSION.SDK_INT >= 30 && !(c2Amlogic && level == LEVEL_FULL)) f.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
         // Moonlight stops here when the decoder reports FEATURE_LowLatency. The Xiaomi MiTV-MOOQ0 decoder reports it,
         // yet side by side (3160x1080) it was slower with only this key: 163-167 ms, 50 ms decoding (2026-10-14),
         // against 80-92 ms with the vendor key and realtime priority in 0.8.4, so level 0 always adds them.
         if (level >= LEVEL_STANDARD) return;
         f.setInteger(MediaFormat.KEY_PRIORITY, 0); // realtime
-        String n = name.toLowerCase(java.util.Locale.ROOT);
         if (n.contains("amlogic")) {
             f.setInteger("vendor.low-latency.enable", 1);
         } else if (n.contains("mtk") || n.contains("mediatek") || n.startsWith("omx.ms.") || n.contains("amazon")) {
@@ -306,6 +310,7 @@ final class VideoOut {
         long t = Mp4.tfdt(b, off, len);
         int[] m = Mp4.mdat(b, off, len);
         if (t < 0 || m == null) return;
+        arrivedTotal++;
         boolean askKey = false;
         synchronized (lock) {
             if (waitKey && !key) {
@@ -353,22 +358,24 @@ final class VideoOut {
 
     private long rateAt;
     private int rateIn, rateOut, slowWindows;
-    private volatile int queuedTotal;
+    private volatile int arrivedTotal;
 
-    // Frames go in at ~60 per second but fewer than 20 come out, for two 2-second windows in a row: the decoder
+    // Frames arrive from the network at ~60 per second (counted on arrival: while a backlog is dropped and the receiver
+    // waits for a keyframe nothing goes into the decoder, which hid a Chromecast's 205 catch-ups from a count of frames
+    // fed to it) but fewer than 20 come out, for two 2-second windows in a row: the decoder
     // runs but far too slowly, the "slideshow" KEY_LOW_LATENCY gave c2.amlogic HEVC on Android TV 14
     // (moonlight-android #1584). Counts as a stall, so the next setup level drops the low-latency keys.
     private boolean slideshow(long now) {
         if (rateAt == 0) {
             rateAt = now;
-            rateIn = queuedTotal;
+            rateIn = arrivedTotal;
             rateOut = shown;
             return false;
         }
         if (now - rateAt < 2000) return false;
-        double secs = (now - rateAt) / 1000.0, in = (queuedTotal - rateIn) / secs, out = (shown - rateOut) / secs;
+        double secs = (now - rateAt) / 1000.0, in = (arrivedTotal - rateIn) / secs, out = (shown - rateOut) / secs;
         rateAt = now;
-        rateIn = queuedTotal;
+        rateIn = arrivedTotal;
         rateOut = shown;
         slowWindows = in >= 45 && out < 20 ? slowWindows + 1 : 0;
         return slowWindows >= 2;
@@ -408,7 +415,6 @@ final class VideoOut {
                 in.put(f.data);
                 codec.queueInputBuffer(idx, 0, f.data.length, f.pts, f.key ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0);
                 inFlight++;
-                queuedTotal++;
                 lastInputAt = System.currentTimeMillis();
                 long nowNs = System.nanoTime();
                 waitTime.add((nowNs - f.arrivedNs) / 1e6);

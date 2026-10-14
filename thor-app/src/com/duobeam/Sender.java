@@ -413,8 +413,11 @@ public final class Sender {
         if (android.os.Build.VERSION.SDK_INT >= 31) {
             // a vendor key set in the format is silently ignored when the encoder does not list it
             StringBuilder vp = new StringBuilder();
-            for (String k : codec.getSupportedVendorParameters()) if (k.contains("latency")) vp.append(' ').append(k);
-            Ln.i("encoder vendor latency keys:" + (vp.length() == 0 ? " none" : vp));
+            for (String k : codec.getSupportedVendorParameters()) {
+                if (k.contains("latency") || k.contains("ref") || k.contains("ltr") || k.contains("layer") || k.contains("bframe")
+                        || k.contains("b-frame") || k.contains("hier")) vp.append(' ').append(k);
+            }
+            Ln.i("encoder vendor keys (latency, references, layers):" + (vp.length() == 0 ? " none" : vp));
         }
         codec.start();
         capture.start(input);
@@ -634,6 +637,10 @@ public final class Sender {
         format.setInteger(MediaFormat.KEY_PRIORITY, 0);
         format.setInteger(MediaFormat.KEY_LATENCY, 1);
         format.setInteger("vendor.qti-ext-enc-low-latency.enable", 1); // Qualcomm vendor low-latency encoder mode
+        // No B-frames, so TV decoders never reorder (Amlogic HEVC needs a single reference frame, per moonlight-android's
+        // MediaCodecHelper). The stream already had none: P-frames only, 1 reference, no reordering (c2.qti.hevc.encoder
+        // on the Thor, checked 2026-10-14); this keeps an encoder default from adding them.
+        if (android.os.Build.VERSION.SDK_INT >= 29) format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);
         return format;
     }
 
