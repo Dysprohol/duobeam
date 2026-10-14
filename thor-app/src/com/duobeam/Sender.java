@@ -52,7 +52,7 @@ import java.util.Map;
  */
 public final class Sender {
 
-    public static final String VERSION = "0.8.4";
+    public static final String VERSION = "0.8.5";
     private static final String NL = "\n";
 
     private static Map<String, String> opts;
