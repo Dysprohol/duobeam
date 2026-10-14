@@ -27,6 +27,12 @@ final class L {
         t("st_streaming", "Streaming to the receiver: %s, %s fps", "Nadaję do odbiornika: %s, %s kl/s");
         t("st_no_tv", "Can't reach the receiver (%s). Is DuoBeam open on it? Trying again...", "Nie mogę połączyć się z odbiornikiem (%s). Czy DuoBeam jest na nim otwarty? Próbuję dalej...");
         t("st_error", "Something went wrong: %s", "Coś poszło nie tak: %s");
+        t("st_enc_size", "This device's video encoder refused every picture size it was offered. Restart the device and try again.",
+                "Koder wideo tego urządzenia odrzucił każdy proponowany rozmiar obrazu. Uruchom urządzenie ponownie i spróbuj jeszcze raz.");
+        t("tv_problem_decoder", "Receiver: its video decoder keeps stopping ✖ - pick another layout or lower quality",
+                "Odbiornik: jego dekoder wideo ciągle staje ✖ - wybierz inny układ albo niższą jakość");
+        t("tv_problem_size", "Receiver can't play this picture size (%s) ✖ - pick another layout",
+                "Odbiornik nie odtworzy obrazu tego rozmiaru (%s) ✖ - wybierz inny układ");
         t("st_foreign", "A stream is running that this app can't control (e.g. after clearing app data). It stops by itself within a few seconds.",
                 "Działa stream, którego ta apka nie kontroluje (np. po wyczyszczeniu danych). Zatrzyma się sam w ciągu kilku sekund.");
         t("tv_receiving", "Receiver is getting the picture \u2714", "Odbiornik odbiera \u2714");
@@ -45,10 +51,17 @@ final class L {
         // layout and quality
         t("card_layout", "Screens on the receiver", "Ekrany na odbiorniku");
         t("lay_side", "Side by side", "Obok siebie");
-        t("lay_stack", "Top above bottom", "Jeden pod drugim");
-        t("lay_pip", "Big top + small bottom", "Duży górny + mały dolny");
+        t("lay_stack", "Top above bottom", "Górny nad dolnym");
+        t("lay_pip", "Top + small bottom on the right", "Górny + mały dolny z prawej");
         t("lay_top", "Top screen only", "Tylko górny ekran");
         t("lay_bottom", "Bottom screen only", "Tylko dolny ekran");
+        // where each screen ends up on the receiver, shown under the layout name
+        t("lay_side_note", "Top screen on the left, bottom screen on the right", "Górny ekran po lewej, dolny po prawej");
+        t("lay_stack_note", "Top screen at the top, bottom screen under it", "Górny ekran na górze, dolny pod nim");
+        t("lay_pip_note", "Top screen fills the TV, bottom screen small in the lower right corner",
+                "Górny ekran na cały telewizor, dolny mały w prawym dolnym rogu");
+        t("lay_top_note", "Only the top screen; the bottom one stays on this device", "Tylko górny ekran; dolny zostaje na tym urządzeniu");
+        t("lay_bottom_note", "Only the bottom screen; the top one stays on this device", "Tylko dolny ekran; górny zostaje na tym urządzeniu");
         t("card_quality", "Picture quality", "Jakość obrazu");
         t("card_audio", "Sound", "Dźwięk");
         t("audio_off", "Only on this device", "Tylko na tym urządzeniu");

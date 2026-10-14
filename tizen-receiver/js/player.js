@@ -36,9 +36,15 @@ setInterval(function () {
 function seekTo(t) { lastSeekAt = performance.now(); v.currentTime = t; }
 // largest frame for the sender (the service passes it on in /status): what the panel shows. QE43Q67C (4K) plays
 // 3160x1080 and 992x2160 but rejects 1080x2340 (2026-10-12). '' = unknown, the sender then uses its default.
-var MAX_VIDEO = '';
-try { MAX_VIDEO = webapis.productinfo.isUdPanelSupported() ? '3840x2160' : '1920x1080'; } catch (e) {}
-var S = { kind: 'player', maxVideo: MAX_VIDEO, started: new Date().toISOString(), frames: 0, keyframes: 0, audio: 0, bytes: 0, inits: 0, waiting: 0, seeks: 0,
+// Also the largest frame area: Samsung lists HEVC level 5.2 for UHD models and 4.1 for FHD models (2024 TV video
+// specifications), i.e. 8,912,896 and 2,228,224 luma samples, and the panel is the screen the picture is shown on.
+var MAX_VIDEO = '', MAX_PIXELS = 0;
+try {
+  var uhd = webapis.productinfo.isUdPanelSupported();
+  MAX_VIDEO = uhd ? '3840x2160' : '1920x1080';
+  MAX_PIXELS = uhd ? 8912896 : 2228224;
+} catch (e) {}
+var S = { kind: 'player', maxVideo: MAX_VIDEO, maxPixels: MAX_PIXELS, screen: MAX_VIDEO, started: new Date().toISOString(), frames: 0, keyframes: 0, audio: 0, bytes: 0, inits: 0, waiting: 0, seeks: 0,
   events: [], codec: null, aheadMs: null, errors: {}, recoveries: [], quota: 0, diag: null };
 var ms = null, sb = null, queue = [], jumped = false, t0 = performance.now(), hudOn = false;
 // waiting screen: visible until video arrives; shown again when the handheld stops sending
@@ -64,6 +70,17 @@ function applyLang() {
 function setLang(l) { lang = l; try { localStorage.setItem('duobeam.lang', l); } catch (e) {} applyLang(); }
 if (switchingRecent()) setSwitching(true); // page was reloaded during a layout switch
 setTimeout(function () { if (!played && switchingRecent() === false) { switchEl.classList.remove('on'); setIdle(true); } }, 10500);
+// The low-latency player refused the stream's picture size (1080x2340 from a phone gave "A provided resolution is
+// invalid", QE43Q67C, 2026-10-12). Reloading or falling back to MSE only restarted the sender and repeated it in a
+// loop, so the TV says what happened and waits for the next stream.
+function emssRejected() {
+  if (!E.lastErr || E.lastErr.indexOf('addVideoTrack') < 0) return false;
+  S.problem = 'size ' + E.w + 'x' + E.h; ev('emss rejected ' + S.problem); report();
+  setIdle(true, 'badsize');
+  stateText.textContent = tr('badsize').replace('{size}', E.w + 'x' + E.h);
+  return true;
+}
+
 function setIdle(on, key) {
   if (key) { stateKey = key; stateText.textContent = tr(key); }
   if (on && switchingRecent()) return; // during a layout switch keep the spinner, not the welcome card
@@ -135,7 +152,7 @@ function setupMse(codec, init) {
 }
 var played = false;
 v.addEventListener('playing', function () {
-  ev('playing'); played = true; setIdle(false); setSwitching(false);
+  ev('playing'); played = true; S.problem = ''; setIdle(false); setSwitching(false);
   if (lastSeekAt && performance.now() - lastSeekAt < 2000) {
     var st = performance.now() - lastSeekAt; lastSeekAt = 0;
     seekStall = seekStall ? Math.round(seekStall * 0.6 + st * 0.4) : Math.round(st); S.seekStallMs = seekStall;
@@ -164,7 +181,7 @@ function onMessage(type, data) {
       ev('new init -> emss restart'); setSwitching(true);
       var nl0 = data.indexOf(10), codec0 = String.fromCharCode.apply(null, data.subarray(0, nl0)), init0 = data.subarray(nl0 + 1);
       emssTeardown(); played = false; S.codec = codec0; S.inits++;
-      setTimeout(function () { if (!emssSetup(codec0, init0)) location.reload(); }, 30);
+      setTimeout(function () { if (!emssSetup(codec0, init0) && !emssRejected()) location.reload(); }, 30);
       return;
     }
     if (ms || E.src) { ev('new init -> reload'); report(); setTimeout(function () { location.reload(); }, 50); ms = null; sb = null; queue = []; return; }
@@ -173,6 +190,7 @@ function onMessage(type, data) {
     var codec = String.fromCharCode.apply(null, data.subarray(0, nl));
     S.codec = codec; S.inits++;
     if (useEmss && emssSetup(codec, data.subarray(nl + 1))) return;
+    if (useEmss && emssRejected()) return;
     useEmss = false; // EMSS unavailable or failed: fall back to MSE
     setupMse(codec.replace(',pcm', ''), data.subarray(nl + 1));
     return;

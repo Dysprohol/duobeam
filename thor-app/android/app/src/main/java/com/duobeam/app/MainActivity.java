@@ -603,7 +603,7 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         return t;
     }
 
-    private RadioGroup radios(LinearLayout parent, String[] labels, int selected, boolean horizontal) {
+    private RadioGroup radios(LinearLayout parent, CharSequence[] labels, int selected, boolean horizontal) {
         RadioGroup g = new RadioGroup(this);
         g.setOrientation(horizontal ? RadioGroup.HORIZONTAL : RadioGroup.VERTICAL);
         for (int i = 0; i < labels.length; i++) {
@@ -751,8 +751,15 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         tv.addView(foundList);
 
         // layout
-        String[] layoutLabels = new String[Settings.LAYOUTS.length];
-        for (int i = 0; i < layoutLabels.length; i++) layoutLabels[i] = L.s(Settings.LAYOUTS[i][1]);
+        // layout name plus a smaller line saying where each screen ends up on the TV
+        CharSequence[] layoutLabels = new CharSequence[Settings.LAYOUTS.length];
+        for (int i = 0; i < layoutLabels.length; i++) {
+            String name = L.s(Settings.LAYOUTS[i][1]), note = L.s(Settings.LAYOUTS[i][1] + "_note");
+            android.text.SpannableString s = new android.text.SpannableString(name + "\n" + note);
+            s.setSpan(new android.text.style.RelativeSizeSpan(0.8f), name.length() + 1, s.length(), 0);
+            s.setSpan(new android.text.style.ForegroundColorSpan(C_MUTED), name.length() + 1, s.length(), 0);
+            layoutLabels[i] = s;
+        }
         LinearLayout layoutCard = card(root, L.s("card_layout"));
         layoutGroup = radios(layoutCard, layoutLabels, settings.layout(), false);
         if (!twoScreens) layoutCard.setVisibility(View.GONE); // one screen: nothing to arrange

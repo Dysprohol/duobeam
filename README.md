@@ -47,9 +47,9 @@ open the receiver on the TV, press Start on the Thor, and play.
 Frames taken from the stream itself, shown in a 16:9 frame the way a TV displays them.
 Top screen: the Thor's home screen, bottom screen: the DuoBeam app.
 
-| Side by side | Top above bottom | Big top + small bottom |
+| Side by side | Top above bottom | Top + small bottom on the right |
 |---|---|---|
-| ![Side by side](docs/img/layout-side.jpg) | ![Top above bottom](docs/img/layout-stack.jpg) | ![Big top + small bottom](docs/img/layout-pip.jpg) |
+| ![Side by side](docs/img/layout-side.jpg) | ![Top above bottom](docs/img/layout-stack.jpg) | ![Top + small bottom on the right](docs/img/layout-pip.jpg) |
 | **Top screen only** | **Bottom screen only** | |
 | ![Top screen only](docs/img/layout-top.jpg) | ![Bottom screen only](docs/img/layout-bottom.jpg) | |
 

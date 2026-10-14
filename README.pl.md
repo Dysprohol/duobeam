@@ -30,7 +30,7 @@ otwierasz odbiornik na TV, naciskasz Start na Thorze i grasz.
 ## Co potrafi
 
 **Na Thorze**
-- Pięć układów: obok siebie, jeden pod drugim, duży górny ekran z małym dolnym, tylko górny, tylko dolny. Można je zmieniać w trakcie gry.
+- Pięć układów: obok siebie, górny nad dolnym, duży górny ekran z małym dolnym, tylko górny, tylko dolny. Można je zmieniać w trakcie gry.
 - Obraz HEVC (H.265) w 60 kl/s, trzy poziomy jakości. Kiedy Wi-Fi się zapycha, spóźnione klatki są pomijane, a bitrate na chwilę spada i potem wraca.
 - Dźwięk gry tylko na TV, na TV i na Thorze albo tylko na Thorze. Bez odbiornika Thor gra normalnie.
 - „Obraz tylko na TV”: podświetlenie jednego albo obu ekranów Thora się wyłącza. Przyciski działają dalej. Dotyk na ciemnym ekranie można zablokować albo zostawić. 3 szybkie stuknięcia w ciemny ekran włączają go z powrotem.
@@ -47,9 +47,9 @@ otwierasz odbiornik na TV, naciskasz Start na Thorze i grasz.
 Klatki wzięte z samego strumienia, pokazane w kadrze 16:9 tak, jak wyświetla je telewizor.
 Górny ekran: pulpit Thora, dolny ekran: aplikacja DuoBeam.
 
-| Obok siebie | Jeden pod drugim | Duży górny + mały dolny |
+| Obok siebie | Górny nad dolnym | Górny + mały dolny z prawej |
 |---|---|---|
-| ![Obok siebie](docs/img/layout-side.jpg) | ![Jeden pod drugim](docs/img/layout-stack.jpg) | ![Duży górny + mały dolny](docs/img/layout-pip.jpg) |
+| ![Obok siebie](docs/img/layout-side.jpg) | ![Górny nad dolnym](docs/img/layout-stack.jpg) | ![Górny + mały dolny z prawej](docs/img/layout-pip.jpg) |
 | **Tylko górny ekran** | **Tylko dolny ekran** | |
 | ![Tylko górny ekran](docs/img/layout-top.jpg) | ![Tylko dolny ekran](docs/img/layout-bottom.jpg) | |
 

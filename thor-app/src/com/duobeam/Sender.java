@@ -43,7 +43,8 @@ import java.util.Map;
  * Usage (as shell):
  *   CLASSPATH=/data/local/tmp/duobeam.jar app_process / com.duobeam.Sender tv=<TV-IP>:8201 layout=side
  * Options: bitrate=12000000 fps=60 iframe=2 wifilock=on|off codec=hevc audio=off|tv|both acodec=aac|opus|pcm avsync=<ms>
- *          maxsize=<W>x<H> (largest frame the receiver decodes; bigger frames are scaled down, default 3840x2160)
+ *          maxsize=<W>x<H> maxpixels=<N> screen=<W>x<H> (receiver's decoder box, largest frame area and screen;
+ *          bigger frames are scaled down to fit, default 3840x2160 and no area or screen limit)
  *
  * Daemon mode (controlled by the app over a local socket, every command prefixed with a token):
  *   ... com.duobeam.Sender daemon port=27500 token=XYZ
@@ -342,9 +343,10 @@ public final class Sender {
         }
         Object wifiLock = "off".equals(opt("wifilock", "on")) ? null : acquireWifiLock();
 
-        // maxsize=WxH: the largest frame the receiver's decoder takes (it reports it in /status); older receivers don't
-        String[] max = opt("maxsize", "3840x2160").split("x");
-        DualCapture capture = new DualCapture(displayIds, layout, fps, Integer.parseInt(max[0]), Integer.parseInt(max[1]));
+        // receiver limits from its /status, passed on by the app; receivers before 0.8.4 report none
+        int[] max = wxh(opt("maxsize", "3840x2160")), screen = wxh(opt("screen", "0x0"));
+        DualCapture capture = new DualCapture(displayIds, layout, fps,
+                new DualCapture.Limits(max[0], max[1], Long.parseLong(opt("maxpixels", "0")), screen[0], screen[1]));
         ThorAudio audio = null;
         MediaCodec codec = null;
         Size size;
@@ -352,8 +354,6 @@ public final class Sender {
         final boolean opus = "opus".equals(acodec);
         final Fmp4 mux = new Fmp4();
         try {
-        size = capture.prepare();
-
         // set up audio before video: the init segment must already know whether there is an audio track
         String audioOpt = opt("audio", "off");
         audio = "off".equals(audioOpt) ? null : ThorAudio.open("both".equals(audioOpt), acodec);
@@ -378,21 +378,37 @@ public final class Sender {
             });
         }
 
-        MediaFormat format = new MediaFormat();
-        format.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_HEVC);
-        format.setInteger(MediaFormat.KEY_WIDTH, size.getWidth());
-        format.setInteger(MediaFormat.KEY_HEIGHT, size.getHeight());
-        format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate * 6 / 10); // start low and ramp up as the Wi-Fi link proves stable
-        format.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        format.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
-        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iframe);
-        format.setInteger(MediaFormat.KEY_PRIORITY, 0);
-        format.setInteger(MediaFormat.KEY_LATENCY, 1);
-        format.setInteger("vendor.qti-ext-enc-low-latency.enable", 1); // Qualcomm vendor low-latency encoder mode
-
         codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_HEVC);
-        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        MediaCodecInfo.VideoCapabilities encCaps = null;
+        try {
+            encCaps = codec.getCodecInfo().getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_HEVC).getVideoCapabilities();
+            capture.setAlignment(Math.max(encCaps.getWidthAlignment(), encCaps.getHeightAlignment()));
+        } catch (Exception e) {
+            Ln.w("encoder capabilities: " + e);
+        }
+        // Reported encoder limits can be wrong (scrcpy 4.1 stopped trusting them up front), so a size the encoder
+        // refuses also steps the frame down on the long side, the same ladder scrcpy uses
+        final int[] downsize = {2560, 1920, 1600, 1280, 1024, 800};
+        int step = 0;
+        while (true) {
+            size = capture.prepare();
+            int w = size.getWidth(), h = size.getHeight();
+            if (encCaps == null || encCaps.isSizeSupported(w, h)) {
+                try {
+                    codec.configure(encoderFormat(w, h, bitrate, fps, iframe), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                    break;
+                } catch (Exception e) {
+                    Ln.w("encoder refused " + w + "x" + h + ": " + e);
+                    codec.reset();
+                }
+            } else {
+                Ln.w("encoder does not list " + w + "x" + h);
+            }
+            int longSide = Math.max(w, h);
+            while (step < downsize.length && downsize[step] >= longSide) step++;
+            if (step >= downsize.length) throw new IllegalStateException("no frame size the encoder accepts (last " + w + "x" + h + ")");
+            capture.setLongSideCap(downsize[step++]);
+        }
         Surface input = codec.createInputSurface();
         if (android.os.Build.VERSION.SDK_INT >= 31) {
             // a vendor key set in the format is silently ignored when the encoder does not list it
@@ -605,6 +621,32 @@ public final class Sender {
     }
 
     /** Releases everything even if a step throws; the hardware encoder goes first since only one instance of this size is available. */
+    private static MediaFormat encoderFormat(int w, int h, int bitrate, int fps, int iframe) {
+        MediaFormat format = new MediaFormat();
+        format.setString(MediaFormat.KEY_MIME, MediaFormat.MIMETYPE_VIDEO_HEVC);
+        format.setInteger(MediaFormat.KEY_WIDTH, w);
+        format.setInteger(MediaFormat.KEY_HEIGHT, h);
+        format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate * 6 / 10); // start low and ramp up as the Wi-Fi link proves stable
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        format.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
+        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iframe);
+        format.setInteger(MediaFormat.KEY_PRIORITY, 0);
+        format.setInteger(MediaFormat.KEY_LATENCY, 1);
+        format.setInteger("vendor.qti-ext-enc-low-latency.enable", 1); // Qualcomm vendor low-latency encoder mode
+        return format;
+    }
+
+    /** "1920x1080" -> {1920, 1080}; anything else -> {0, 0}. */
+    private static int[] wxh(String s) {
+        String[] p = s.split("x");
+        try {
+            return new int[] {Integer.parseInt(p[0]), Integer.parseInt(p[1])};
+        } catch (Exception e) {
+            return new int[] {0, 0};
+        }
+    }
+
     private static void cleanup(MediaCodec codec, DualCapture capture, ThorAudio audio, Object wifiLock) {
         if (codec != null) {
             try { codec.stop(); } catch (Throwable e) { Ln.w("codec stop: " + e); }

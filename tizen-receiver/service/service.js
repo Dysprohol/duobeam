@@ -94,11 +94,11 @@ var out = http.createServer(function (req, res) {
   res.setHeader('Content-Type', 'application/json');
   if (req.url === '/hello') {
     return res.end(JSON.stringify({ app: 'DuoBeam', role: 'receiver', version: VERSION, platform: 'tizen', ingestPort: IN_PORT, busy: stream.src > 0,
-      player: stream.player || 'mse', maxVideo: stream.maxVideo || '' }));
+      player: stream.player || 'mse', maxVideo: stream.maxVideo || '', maxPixels: stream.maxPixels || 0, screen: stream.screen || '' }));
   }
   if (req.url === '/status') {
     // maxVideo early: the handheld app reads only the first 1 KB
-    return res.end(JSON.stringify({ player: stream.player || 'mse', version: VERSION, maxVideo: stream.maxVideo || '', started: stream.started, src: stream.src, lastSrc: stream.lastSrc, sinks: stream.sinks.length,
+    return res.end(JSON.stringify({ player: stream.player || 'mse', version: VERSION, maxVideo: stream.maxVideo || '', maxPixels: stream.maxPixels || 0, screen: stream.screen || '', problem: stream.problem || '', started: stream.started, src: stream.src, lastSrc: stream.lastSrc, sinks: stream.sinks.length,
       frames: stream.frames, audio: stream.audio || 0, audioAvgBytes: stream.audioAvg || 0, bytes: stream.bytes, dropped: stream.dropped, hasInit: !!stream.init,
       clock: stream.clock || null, lastMark: stream.lastMark || null }));
   }
@@ -109,6 +109,9 @@ var out = http.createServer(function (req, res) {
         var j = JSON.parse(b);
         if (j.player) stream.player = j.player; // emss = PCM audio, mse = AAC/Opus
         if (j.maxVideo) stream.maxVideo = j.maxVideo; // largest frame the TV takes, from the page
+        if (j.maxPixels) stream.maxPixels = j.maxPixels; // largest frame area of its HEVC level
+        if (j.screen) stream.screen = j.screen;
+        stream.problem = j.problem || ''; // what failed after the automatic fixes, shown by the handheld app
       } catch (e) {}
       res.end('{"ok":true}'); }); return; }
     return res.end(lastReport || 'null');

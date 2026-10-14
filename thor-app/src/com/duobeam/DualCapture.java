@@ -75,9 +75,8 @@ final class DualCapture {
     final Stats latch = new Stats(); // source buffer produced -> drawn into the output frame
     volatile int skippedBuffers, badTimestamps;
 
-    DualCapture(int[] displayIds, String layout, int fps, int maxW, int maxH) {
-        this.maxW = maxW;
-        this.maxH = maxH;
+    DualCapture(int[] displayIds, String layout, int fps, Limits limits) {
+        this.limits = limits;
         sources = new Source[displayIds.length];
         for (int i = 0; i < displayIds.length; i++) sources[i] = new Source(displayIds[i]);
         this.layout = layout;
@@ -127,7 +126,7 @@ final class DualCapture {
                 }
             }
         }
-        fitTvLimit(sources);
+        fit(sources);
         Ln.i("layout " + layout + " -> " + outSize.getWidth() + "x" + outSize.getHeight());
         return outSize;
     }
@@ -141,22 +140,62 @@ final class DualCapture {
         return false;
     }
 
-    // Samsung's low-latency player rejects a 1080x2340 portrait phone screen ("resolution is invalid", QE43Q67C,
-    // 2026-10-12) while 3160x1080 plays, so frames larger than the receiver's decoder limit are scaled down to fit
-    private final int maxW, maxH;
+    /**
+     * What the receiver reported in /status (0 = not reported): its decoder's largest width and height, the largest
+     * frame area its HEVC level allows, and the screen resolution it shows the picture at.
+     */
+    static final class Limits {
+        final int maxW, maxH, screenW, screenH;
+        final long maxPixels;
 
-    private void fitTvLimit(Source[] all) {
-        double f = Math.min((double) maxW / outSize.getWidth(), (double) maxH / outSize.getHeight());
+        Limits(int maxW, int maxH, long maxPixels, int screenW, int screenH) {
+            this.maxW = maxW;
+            this.maxH = maxH;
+            this.maxPixels = maxPixels;
+            this.screenW = screenW;
+            this.screenH = screenH;
+        }
+    }
+
+    // Samsung's low-latency player rejects a 1080x2340 portrait phone screen ("resolution is invalid", QE43Q67C,
+    // 2026-10-12) while 3160x1080 plays. The frame is the smallest of: the composed screens, the receiver's decoder
+    // box, its HEVC level's area (level 4.1 = 2,228,224 pixels, less than 3160x1080), the TV screen it is shown on,
+    // and the long-side cap the sender sets after an encoder refused a size. Aspect is kept, never scaled up.
+    private final Limits limits;
+    private int align = 2, longSideCap;
+
+    /** Size step the encoder needs (MediaCodecInfo.VideoCapabilities width/height alignment). */
+    void setAlignment(int a) {
+        align = Math.max(2, a);
+    }
+
+    /** Long-side limit after the encoder refused a size; 0 = none. Takes effect on the next prepare(). */
+    void setLongSideCap(int px) {
+        longSideCap = px;
+    }
+
+    private void fit(Source[] all) {
+        double w = outSize.getWidth(), h = outSize.getHeight(), f = 1;
+        Limits l = limits;
+        if (l.maxW > 0) f = Math.min(f, l.maxW / w);
+        if (l.maxH > 0) f = Math.min(f, l.maxH / h);
+        if (l.maxPixels > 0) f = Math.min(f, Math.sqrt(l.maxPixels / (w * h)));
+        if (l.screenW > 0 && l.screenH > 0) f = Math.min(f, Math.min(l.screenW / w, l.screenH / h)); // more is never seen
+        if (longSideCap > 0) f = Math.min(f, longSideCap / Math.max(w, h));
         if (f >= 1) return;
-        int w = (int) (outSize.getWidth() * f) / 16 * 16, h = (int) (outSize.getHeight() * f) / 16 * 16;
-        double fx = (double) w / outSize.getWidth(), fy = (double) h / outSize.getHeight();
+        // scaled sizes in steps of at least 8: Amlogic decoders repeat edge lines when the height is not a multiple of 8
+        int a = Math.max(align, 8);
+        int nw = (int) (w * f) / a * a, nh = (int) (h * f) / a * a;
+        double fx = nw / w, fy = nh / h;
         for (Source s : all) {
             if (s.dst == null) continue;
             s.dst = new Rect((int) Math.round(s.dst.left * fx), (int) Math.round(s.dst.top * fy),
                     (int) Math.round(s.dst.right * fx), (int) Math.round(s.dst.bottom * fy));
         }
-        Ln.i("frame " + outSize.getWidth() + "x" + outSize.getHeight() + " scaled to " + w + "x" + h + " (receiver limit " + maxW + "x" + maxH + ")");
-        outSize = new Size(w, h);
+        Ln.i("frame " + outSize.getWidth() + "x" + outSize.getHeight() + " scaled to " + nw + "x" + nh + " (receiver decoder "
+                + l.maxW + "x" + l.maxH + ", max pixels " + l.maxPixels + ", screen " + l.screenW + "x" + l.screenH
+                + (longSideCap > 0 ? ", long side cap " + longSideCap : "") + ")");
+        outSize = new Size(nw, nh);
     }
 
     void start(Surface encoderSurface) throws Exception {

@@ -73,6 +73,7 @@ function audioConfigs() {
 }
 
 function emssSetup(codecLine, init) {
+  E.lastErr = null; // a failure from an earlier stream must not be reported for this one
   var cs = codecLine.split(',');
   E.vcodec = cs[0].replace(/^hvc1/, 'hev1'); // parameter sets in-band (Annex-B), not in extradata
   E.acodec = !cs[1] ? '' : (cs[1].indexOf('pcm') >= 0 ? 'pcm' : cs[1].indexOf('opus') >= 0 ? 'opus' : 'aac');
@@ -145,7 +146,7 @@ function emssVideo(d, key) {
   if (E.base === null) E.base = sec; // player clock starts at 0 on the first keyframe
   if (emssAppend(E.vt, concat(parts), sec - E.base, 1 / 60, key, true)) {
     E.vSent++;
-    if (!played) { played = true; setIdle(false); setSwitching(false); ev('emss first frame'); }
+    if (!played) { played = true; S.problem = ''; setIdle(false); setSwitching(false); ev('emss first frame'); }
   }
 }
 

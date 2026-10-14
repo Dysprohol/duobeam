@@ -156,6 +156,7 @@ final class StreamClient {
             String[] p = s.split(" ", 3);
             return L.f("st_no_tv", p.length > 1 ? p[1] : "?");
         }
+        if (s.startsWith("ERROR") && s.contains("no frame size the encoder accepts")) return L.s("st_enc_size");
         if (s.startsWith("ERROR")) return L.f("st_error", s.length() > 6 ? s.substring(6) : "?");
         return s;
     }
@@ -241,6 +242,10 @@ final class StreamClient {
     private volatile String receiverPlayer = "";
     // largest frame the receiver decodes, "WxH" from its /status; empty = not reported (receivers before 0.8.4)
     private volatile String receiverMax = "";
+    // largest frame area its HEVC level allows and the screen it shows the picture at (receivers from 0.8.5)
+    private volatile String receiverPixels = "", receiverScreen = "";
+    // what failed on the receiver after its own fixes: "decoder" or "size WxH" (receivers from 0.8.5); "" = fine
+    private volatile String receiverProblem = "";
 
     private String fetchTvStatus(int connectMs, int readMs) throws java.io.IOException {
         String host = settings.tv().split(":")[0];
@@ -256,6 +261,12 @@ final class StreamClient {
             if (m.find()) receiverPlayer = m.group(1);
             java.util.regex.Matcher mx = java.util.regex.Pattern.compile("\"maxVideo\":\"(\\d+x\\d+)\"").matcher(body);
             receiverMax = mx.find() ? mx.group(1) : "";
+            java.util.regex.Matcher mp = java.util.regex.Pattern.compile("\"maxPixels\":(\\d+)").matcher(body);
+            receiverPixels = mp.find() ? mp.group(1) : "";
+            java.util.regex.Matcher ms = java.util.regex.Pattern.compile("\"screen\":\"(\\d+x\\d+)\"").matcher(body);
+            receiverScreen = ms.find() ? ms.group(1) : "";
+            java.util.regex.Matcher mr = java.util.regex.Pattern.compile("\"problem\":\"([^\"]*)\"").matcher(body);
+            receiverProblem = mr.find() ? mr.group(1) : "";
             return body;
         }
     }
@@ -265,6 +276,8 @@ final class StreamClient {
         String args = settings.buildArgs();
         if ("emss".equals(receiverPlayer) || "android".equals(receiverPlayer)) args = args.replaceAll("acodec=\\w+", "acodec=pcm");
         if (!receiverMax.isEmpty()) args += " maxsize=" + receiverMax;
+        if (!receiverPixels.isEmpty()) args += " maxpixels=" + receiverPixels;
+        if (!receiverScreen.isEmpty()) args += " screen=" + receiverScreen;
         return args;
     }
 
@@ -274,8 +287,9 @@ final class StreamClient {
         int ns = 0;
         if (isStreaming()) {
             try {
-                String before = receiverPlayer;
+                String before = receiverPlayer, problemBefore = receiverProblem;
                 String body = fetchTvStatus(800, 1200);
+                if (!problemBefore.equals(receiverProblem)) notifyChanged();
                 // receiver switched player (red remote button): restart the sender with a matching audio codec
                 if (!before.isEmpty() && !before.equals(receiverPlayer) && settings.audio() != 0) main.post(this::start);
                 boolean receiving = body.contains("\"src\":1") || body.matches("(?s).*\"src\":[1-9].*");
@@ -293,6 +307,10 @@ final class StreamClient {
     /** Receiver reception status line; empty when not streaming. */
     String tvLine() {
         if (!isStreaming()) return "";
+        // the receiver tried its automatic fixes and still fails: say what and what to do
+        String pr = receiverProblem;
+        if (pr.equals("decoder")) return L.s("tv_problem_decoder");
+        if (pr.startsWith("size ")) return L.f("tv_problem_size", pr.substring(5));
         return tvState == 1 ? L.s("tv_receiving") : tvState == 2 ? L.s("tv_not_receiving") : "";
     }
 
