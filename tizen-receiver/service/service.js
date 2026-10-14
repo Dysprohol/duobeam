@@ -25,8 +25,17 @@ function fanout(msg, type) {
   });
 }
 
+// The handheld that is streaming. A second one while it sends is turned away: both used to be forwarded into the one
+// stream. The same handheld reconnecting (stream restart), or a new one after 2 s of silence, replaces it.
+var active = null;
+
 var ingest = net.createServer(function (c) {
-  c.setNoDelay(true); stream.src++; stream.lastSrc = (c.remoteAddress || '').replace(/^::ffff:/, '');
+  var addr = (c.remoteAddress || '').replace(/^::ffff:/, '');
+  if (active && active.addr !== addr && Date.now() - active.lastData < 2000) { c.destroy(); return; }
+  if (active) active.sock.destroy();
+  var me = { sock: c, addr: addr, lastData: Date.now() };
+  active = me;
+  c.setNoDelay(true); stream.src++; stream.lastSrc = addr;
   // clock ping: the sender echoes our time plus its own (type 9); the lowest-RTT sample gives the most accurate offset
   var pingT = setInterval(function () {
     var b = Buffer.alloc(8); b.writeDoubleBE(Date.now(), 0);
@@ -34,10 +43,11 @@ var ingest = net.createServer(function (c) {
   }, 1000);
   var buf = Buffer.alloc(0);
   c.on('data', function (d) {
+    me.lastData = Date.now();
     buf = buf.length ? Buffer.concat([buf, d]) : d;
     while (buf.length >= 5) {
       var len = buf.readUInt32BE(0);
-      if (len > 64 * 1024 * 1024) { c.destroy(); return; } // garbage, not a frame
+      if (len < 1 || len > 64 * 1024 * 1024) { c.destroy(); return; } // garbage, not a frame (0 misread the next one)
       if (buf.length < 4 + len) break;
       var msg = buf.slice(0, 4 + len), type = buf[4];
       buf = buf.slice(4 + len);
@@ -69,6 +79,7 @@ var ingest = net.createServer(function (c) {
   });
   c.on('error', function () {});
   c.on('close', function () {
+    if (active === me) active = null;
     clearInterval(pingT); clockSamples = []; stream.clock = null;
     stream.src--;
     if (stream.src > 0) return;
@@ -80,8 +91,23 @@ var ingest = net.createServer(function (c) {
   });
 });
 
+// The player page runs on the TV and connects to the TV's own address. /stream (the picture) and POST /report (which
+// can switch the player and so restart the sender) answered anyone on the network; now only the TV itself.
+// A request from the TV itself comes from the same address it arrives at (os.networkInterfaces() failed inside the
+// Tizen service and the page got no picture, QE43Q67C 2026-10-14).
+function fromThisTv(req) {
+  var s = req.socket;
+  if (!s) return false;
+  var from = (s.remoteAddress || '').replace(/^::ffff:/, ''), to = (s.localAddress || '').replace(/^::ffff:/, '');
+  return from !== '' && (from === to || from === '127.0.0.1' || from === '::1');
+}
+
 var out = http.createServer(function (req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  if ((req.url === '/stream' || (req.url === '/report' && req.method === 'POST')) && !fromThisTv(req)) {
+    stream.denied = { n: ((stream.denied && stream.denied.n) || 0) + 1, from: (req.socket && req.socket.remoteAddress) || '', url: req.url };
+    res.statusCode = 403; return res.end('{"error":"only the TV itself"}');
+  }
   if (req.url === '/stream') {
     res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' });
     if (res.socket) res.socket.setNoDelay(true);
@@ -100,7 +126,7 @@ var out = http.createServer(function (req, res) {
     // maxVideo early: the handheld app reads only the first 1 KB
     return res.end(JSON.stringify({ player: stream.player || 'mse', version: VERSION, maxVideo: stream.maxVideo || '', maxPixels: stream.maxPixels || 0, screen: stream.screen || '', problem: stream.problem || '', started: stream.started, src: stream.src, lastSrc: stream.lastSrc, sinks: stream.sinks.length,
       frames: stream.frames, audio: stream.audio || 0, audioAvgBytes: stream.audioAvg || 0, bytes: stream.bytes, dropped: stream.dropped, hasInit: !!stream.init,
-      clock: stream.clock || null, lastMark: stream.lastMark || null }));
+      clock: stream.clock || null, lastMark: stream.lastMark || null, denied: stream.denied || null }));
   }
   if (req.url === '/report') {
     if (req.method === 'POST') { var b = ''; req.on('data', function (c) { b += c; }); req.on('end', function () {
