@@ -129,6 +129,22 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         return new Intent(android.provider.Settings.ACTION_DEVICE_INFO_SETTINGS);
     }
 
+    private LinearLayout rootView, screensCard;
+    private int setupPlace = -1; // 0 = top (setup not done yet), 1 = its usual place lower down
+
+    /**
+     * Until the one-time setup is done nothing else in the app works, so its card sits right under the header; once
+     * done it moves down to its usual place above the device screens card (the root's LayoutTransition animates it).
+     */
+    private void placeSetupCard(boolean done) {
+        int want = done ? 1 : 0;
+        if (want == setupPlace || rootView == null || setupCard == null || screensCard == null) return;
+        setupPlace = want;
+        rootView.removeView(setupCard);
+        rootView.addView(setupCard, done ? rootView.indexOfChild(screensCard) : 1); // index 0 is the header
+        if (!done) scroll.post(() -> scroll.scrollTo(0, 0));
+    }
+
     private void openOverlaySettings() {
         startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
     }
@@ -200,6 +216,7 @@ public class MainActivity extends Activity implements StreamClient.Listener {
         statusText.setText(client.humanStatus() + (tvl.isEmpty() ? "" : "\n" + tvl));
         statusText.setTextColor(client.isStreaming() ? (client.tvOk() ? C_OK : 0xFFFFC27A) : C_MUTED);
         boolean paired = AdbLauncher.isPaired(this), done = client.setupDone();
+        placeSetupCard(done);
         if (done) {
             setupText.setText(L.s("setup_done"));
             setupText.setTextColor(C_OK);
@@ -652,6 +669,8 @@ public class MainActivity extends Activity implements StreamClient.Listener {
     private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        rootView = root;
+        setupPlace = -1; // a rebuilt screen (e.g. language switch) places the setup card again
         root.setLayoutTransition(smooth());
         root.setPadding(dp(18), dp(14), dp(18), dp(24));
 
@@ -894,6 +913,7 @@ public class MainActivity extends Activity implements StreamClient.Listener {
 
         // device screens while streaming
         LinearLayout scr = card(root, L.s(twoScreens ? "card_screens" : "card_screen"));
+        screensCard = scr;
         screensGroup = radios(scr, twoScreens
                         ? new String[] {L.s("scr_both_on"), L.s("scr_top_off"), L.s("scr_bottom_off"), L.s("scr_both_off")}
                         : new String[] {L.s("scr_on"), "", "", L.s("scr_off")},
