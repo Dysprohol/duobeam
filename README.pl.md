@@ -4,7 +4,7 @@
 
 <p align="center">
 DuoBeam przesyła oba ekrany dwuekranowej konsoli z Androidem na telewizor przez Wi-Fi, razem z dźwiękiem gry.<br>
-Powstał i jest testowany na AYN Thorze; konsole z jednym ekranem też są obsługiwane (zobacz <a href="#urządzenia">Urządzenia</a>).<br>
+Powstał i jest testowany na AYN Thorze; urządzenia z jednym ekranem też działają, sprawdzone na telefonie (zobacz <a href="#urządzenia">Urządzenia</a>).<br>
 Odbiornik działa na telewizorach Samsunga (Tizen) i na Android TV / Google TV. Bez komputera, kabli i roota.
 </p>
 
@@ -26,12 +26,14 @@ Chciałem grać na Thorze na telewizorze i dalej widzieć oba ekrany.
 Mam telewizor Samsunga i chciałem, żeby obraz szedł prosto na niego, bez komputera po drodze i bez kabli.
 Nie znalazłem wtedy oprogramowania, które robiłoby to tak, jak potrzebowałem, więc zrobiłem DuoBeam:
 otwierasz odbiornik na TV, naciskasz Start na Thorze i grasz.
+Zrobiłem go z wykorzystaniem Claude Code, asystenta AI do programowania, i testowałem każdą wersję na moim Thorze i telewizorach.
 
 ## Co potrafi
 
 **Na Thorze**
 - Pięć układów: obok siebie, górny nad dolnym, duży górny ekran z małym dolnym, tylko górny, tylko dolny. Można je zmieniać w trakcie gry.
 - Obraz HEVC (H.265) w 60 kl/s, trzy poziomy jakości. Kiedy Wi-Fi się zapycha, spóźnione klatki są pomijane, a bitrate na chwilę spada i potem wraca.
+- Obraz jest zmniejszany do tego, co telewizor odtworzy: każdy odbiornik podaje aplikacji największy obraz, jaki przyjmie jego dekoder. Obrócenie telefonu restartuje stream w nowym kształcie.
 - Dźwięk gry tylko na TV, na TV i na Thorze albo tylko na Thorze. Bez odbiornika Thor gra normalnie.
 - „Obraz tylko na TV”: podświetlenie jednego albo obu ekranów Thora się wyłącza. Przyciski działają dalej. Dotyk na ciemnym ekranie można zablokować albo zostawić. 3 szybkie stuknięcia w ciemny ekran włączają go z powrotem.
 - Sterowanie w trakcie gry z paska bocznego na dolnym ekranie, z powiadomienia albo z kafelka w szybkich ustawieniach.
@@ -40,7 +42,9 @@ otwierasz odbiornik na TV, naciskasz Start na Thorze i grasz.
 **Na telewizorze**
 - Samsung odtwarza strumień swoim odtwarzaczem o niskim opóźnieniu (w trybie ultra niskiego opóźnienia, który Samsung opisuje do streamingu gier). Telewizory bez tego odtwarzacza same przechodzą na zwykły.
 - Android TV dekoduje sprzętowo prosto na ekran.
-- Te same przyciski pilota na obu: **OK** pokazuje pomiar opóźnienia, **↑/↓** wybiera najmniejsze opóźnienie / zrównoważony / najpłynniejszy, **←/→** zmienia język.
+- Te same przyciski pilota na obu: **OK** pokazuje pomiar opóźnienia (na Android TV także dekoder, jego ustawienie i restarty), **↑/↓** wybiera najmniejsze opóźnienie / zrównoważony / najpłynniejszy, **←/→** zmienia język.
+- Jedna konsola naraz: gdy jedna nadaje, druga zostaje odrzucona, zamiast przejmować telewizor.
+- Gdy mimo automatycznych poprawek coś nie działa, telewizor i aplikacja mówią, co się stało i co spróbować.
 
 ### Układy
 
@@ -60,9 +64,10 @@ Górny ekran: pulpit Thora, dolny ekran: aplikacja DuoBeam.
 ## Urządzenia
 
 DuoBeam powstaje i jest testowany na **AYN Thorze** (Android 13).
-Aplikacja sama wykrywa wbudowane ekrany urządzenia, więc powinna działać też na konsolach z Androidem z jednym ekranem
-(Anbernic, Retroid, AYN Odin i podobne): wysyła wtedy ten jeden ekran i ukrywa opcje, które mają sens tylko przy dwóch.
-Nie testowałem tego jeszcze na takim urządzeniu; zgłoszenia mile widziane.
+Aplikacja sama wykrywa wbudowane ekrany urządzenia, więc działa też na urządzeniach z jednym ekranem:
+wysyła wtedy ten jeden ekran i ukrywa opcje, które mają sens tylko przy dwóch.
+Sprawdzone na telefonie **Samsung Galaxy S26 Ultra**: parowanie, jego pionowy ekran na telewizorze Samsunga oraz obrót do poziomu i z powrotem.
+Konsole z jednym ekranem (Anbernic, Retroid, AYN Odin i podobne) powinny działać tak samo; żadnej jeszcze nie testowałem, więc zgłoszenia mile widziane.
 
 Wymagania wobec konsoli:
 - Android 11 lub nowszy, 64-bitowy ARM
@@ -82,6 +87,8 @@ Gdy aplikacja zniknie, proces sam się zatrzymuje w ciągu około 5 sekund.
 **Obraz.** Proces składa oba ekrany w jedną teksturę OpenGL w wybranym układzie, koduje ją sprzętowym enkoderem HEVC Thora w stałych 60 kl/s,
 pakuje każdą klatkę we fragment fMP4 i wysyła przez TCP. Klatki starsze niż 150 ms są pomijane, zamiast docierać z opóźnieniem.
 Jeśli telewizor zgłosi, że nie nadąża, następna klatka jest kluczowa.
+Przed każdym streamem aplikacja pyta odbiornik o największy obraz, jaki odtworzy jego dekoder (szerokość, wysokość i łączny rozmiar dopuszczalny dla jego poziomu HEVC),
+a proces zmniejsza obraz do tej wielkości, zachowując proporcje. Jeśli enkoder konsoli odrzuci rozmiar, próbuje mniejszych.
 
 **Dźwięk.** Dźwięk gier i multimediów jest przechwytywany systemowym przechwytywaniem odtwarzania i wysyłany razem z obrazem
 jako nieskompresowany PCM, który oba odtwarzacze na TV odtwarzają bez problemów. W trybie „tylko na odbiorniku” dźwięk nie leci z głośników Thora,
@@ -90,7 +97,8 @@ w trybie „odbiornik i Thor” gra w obu miejscach.
 **Odbiorniki.** Na Samsungu odbiornik to aplikacja webowa Tizen z małą usługą Node na telewizorze.
 Usługa odbiera strumień TCP, a strona podaje go do Samsung Elementary Media Stream Source
 w trybie ultra niskiego opóźnienia, który Samsung opisuje do streamingu gier. Na Android TV klatki trafiają do `MediaCodec`, który wyświetla je bezpośrednio na ekranie,
-a dźwięk do `AudioTrack`.
+a dźwięk do `AudioTrack`. Dekodery w telewizorach bardzo różnie reagują na ustawienia niskiego opóźnienia, więc odbiornik Android TV
+zaczyna od ustawień przewidzianych dla swojego układu i sam schodzi do mniejszej ich liczby, gdy dekoder staje albo pokazuje tylko kilka klatek na sekundę.
 
 **Pomiar opóźnienia.** Thor oznacza każdą klatkę znacznikiem czasu, a odbiornik synchronizuje z nim zegar krótkimi pingami,
 więc może pokazać, ile każda klatka spędziła na Thorze, w Wi-Fi i na telewizorze.
@@ -121,12 +129,14 @@ Pobierz `DuoBeam-androidtv-<wersja>.apk` z [Releases](../../releases) i zainstal
 
 - **Obtainium**, jeśli używasz go na TV. Dodaje to repozytorium z filtrem na APK odbiornika i pilnuje aktualizacji.
 
-  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-androidtv-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FDysprohol%2Fduobeam%22%2C%22author%22%3A%22Dysprohol%22%2C%22name%22%3A%22DuoBeam%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-androidtv-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
 
 - **Downloader** (od AFTVnews, ze Sklepu Play na TV): wpisz link do pliku APK i zainstaluj.
 - **Pendrive**: skopiuj na niego APK, podłącz do TV i otwórz plik w menedżerze plików.
 - **Send Files to TV** albo dowolny menedżer plików: skopiuj APK z telefonu i otwórz go na TV.
 - **adb**, jeśli go masz: włącz debugowanie w *Opcjach programisty* telewizora (zależnie od modelu nazywa się debugowaniem USB albo sieciowym), potem `adb connect <ip-tv>` i `adb install DuoBeam-androidtv-<wersja>.apk`.
+
+Nowsze Fire TV Sticki z systemem Vega OS Amazona zamiast Androida (np. Fire TV Stick 4K Select) nie instalują plików APK, więc odbiornik na nich nie zadziała.
 
 Android raz zapyta, czy użyta aplikacja może instalować aplikacje; zezwól.
 Otwórz **DuoBeam TV** z listy aplikacji. Pokaże swój adres i będzie czekać.
@@ -175,14 +185,14 @@ Warto wiedzieć:
 1. Zainstaluj `DuoBeam-handheld-<wersja>.apk` z [Releases](../../releases). Jeśli Play Protect ostrzega o nieznanej aplikacji, wybierz *Więcej szczegółów → Zainstaluj mimo to*.
    Przez [Obtainium](https://github.com/ImranR98/Obtainium) dostaniesz też aktualizacje:
 
-   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-handheld-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
+   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FDysprohol%2Fduobeam%22%2C%22author%22%3A%22Dysprohol%22%2C%22name%22%3A%22DuoBeam%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-handheld-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
 
-   (albo dodaj w Obtainium sam adres `https://github.com/Gengaroshi/duobeam` i wybierz plik `DuoBeam-handheld`).
+   (albo dodaj w Obtainium sam adres `https://github.com/Dysprohol/duobeam` i wybierz plik `DuoBeam-handheld`).
 
-2. Otwórz DuoBeam i przejdź **Jednorazową konfigurację**:
-   - Opcje programisty muszą być włączone: *Ustawienia → Informacje o urządzeniu → 7 razy dotknij „Numer kompilacji”*.
-   - Naciśnij **Konfiguruj**. Opcje programisty otworzą się na drugim ekranie, więc ekran DuoBeam zostaje widoczny.
-   - Wejdź w *Debugowanie bezprzewodowe → Sparuj urządzenie za pomocą kodu parowania* i wpisz 6-cyfrowy kod w DuoBeam.
+2. Otwórz DuoBeam i przejdź **Jednorazową konfigurację** (do jej zakończenia jest na górze aplikacji):
+   - Opcje programisty muszą być włączone: *Ustawienia → Informacje o urządzeniu → 7 razy dotknij „Numer kompilacji”* (na Samsungu: *Informacje o oprogramowaniu → Numer wersji*). Jeśli są wyłączone, **Konfiguruj** sam otworzy ten ekran.
+   - Naciśnij **Konfiguruj**. Na Thorze opcje programisty otworzą się na drugim ekranie, więc ekran DuoBeam zostaje widoczny; na telefonie kod można wpisać w powiadomieniu DuoBeam.
+   - Wejdź w *Debugowanie bezprzewodowe → Sparuj urządzenie za pomocą kodu parowania* i wpisz 6-cyfrowy kod w DuoBeam. Parowanie rusza po szóstej cyfrze.
 
    Po sparowaniu DuoBeam sam włącza debugowanie bezprzewodowe, więc po restarcie nie trzeba tego powtarzać.
    Debugowanie bezprzewodowe działa tylko przez Wi-Fi, którego DuoBeam i tak potrzebuje.
@@ -196,6 +206,8 @@ Warto wiedzieć:
 - **Przycięcia.** Zostaw włączone *Wi-Fi na pełnej mocy*, używaj Wi-Fi 5 GHz, spróbuj niższej jakości albo 30 kl/s, albo przełącz na TV strzałkami ↑/↓ na tryb *zrównoważony*.
 - **Pasek boczny się nie pojawia.** Pokazuje się tylko podczas streamu i potrzebuje uprawnienia *Wyświetlanie nad innymi aplikacjami*. Dopóki go brakuje, DuoBeam pokazuje pod opcją paska skrót do tego ustawienia.
 - **„Sparuj ponownie”.** Potrzebne po wyczyszczeniu danych DuoBeam albo po cofnięciu autoryzacji debugowania w opcjach programisty.
+- **Telewizor pisze, że dekoder ciągle staje albo że nie odtworzy obrazu tego rozmiaru.** Spróbuj innego układu albo niższej jakości. Jeśli nie pomoże, naciśnij OK na pilocie Android TV i wyślij zdjęcie okienka z informacjami w [zgłoszeniu](../../issues).
+- **Odbiornik nic nie dostaje, choć naciśnięto Start.** Na ten telewizor może nadawać inna konsola; odbiornik przyjmuje tylko jedną naraz.
 
 ## Budowanie, układ projektu, protokół
 
@@ -206,6 +218,7 @@ Polecenia budowania, struktura katalogów i opis protokołu są w [README.md](RE
 - Żadnych kont, logowań ani kluczy API. DuoBeam nigdy nie prosi o dane logowania.
 - Żadnych połączeń z internetem, analityki ani telemetrii. Cały ruch zostaje w sieci lokalnej: konsola → TV na portach TCP 8201 i 8202.
 - Strumień nie jest szyfrowany, więc używaj DuoBeam w zaufanej sieci.
+- Odbiornik przyjmuje jedną konsolę naraz. Na telewizorach Samsunga obraz trafia tylko do odtwarzacza na samym telewizorze; inne urządzenia w sieci nie dostaną go z odbiornika.
 - Proces pomocniczy na konsoli nasłuchuje tylko na 127.0.0.1 i wymaga losowego tokenu, który zna wyłącznie aplikacja. Token jest maskowany w logach.
 - Klucz parowania debugowania bezprzewodowego zostaje w prywatnym katalogu aplikacji. Po sparowaniu DuoBeam nadaje sobie uprawnienie `WRITE_SECURE_SETTINGS`, żeby po restarcie samemu włączać debugowanie bezprzewodowe. Żeby to cofnąć, usuń DuoBeam z *Opcje programisty → Debugowanie bezprzewodowe → Sparowane urządzenia* i odinstaluj aplikację.
 
@@ -213,19 +226,11 @@ Polecenia budowania, struktura katalogów i opis protokołu są w [README.md](RE
 
 Odbiorniki na Windowsa, Linuksa i macOS.
 
-## Jak powstał
-
-DuoBeam powstał z pomocą Claude Code, asystenta AI do programowania od Anthropic. Większość kodu i dokumentacji napisał on, nie ja ręcznie. Moja rola: decydowanie, co aplikacja ma robić i jak ma działać, testowanie każdej wersji na Thorze i telewizorach, zgłaszanie, co nie działa, i decydowanie, co trafia do aplikacji. Commity, przy których pracował, mają dopisek `Co-Authored-By: Claude`.
-
 ## Uwagi i zgłoszenia
 
 DuoBeam to projekt hobbystyczny. Jeśli go wypróbujesz, chętnie dowiem się, jak poszło, zwłaszcza na innych konsolach niż Thor.
 Znalazłeś błąd albo masz pomysł? Załóż [zgłoszenie (issue)](../../issues) i podaj model konsoli, wersję Androida,
 telewizor lub odbiornik oraz co się stało. Postaram się odpowiedzieć, choć może to potrwać kilka dni.
-
-Jeśli DuoBeam ci się przydał i chcesz podziękować, możesz zostawić napiwek na Ko-fi:
-
-<a href="https://ko-fi.com/gengaroshi"><img src="docs/img/kofi-button.png" alt="Support me on Ko-fi" width="159"></a>
 
 ## Licencja
 

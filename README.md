@@ -4,7 +4,7 @@
 
 <p align="center">
 DuoBeam sends both screens of a dual-screen Android handheld to a TV over Wi-Fi, together with the game sound.<br>
-Made and tested on the AYN Thor; single-screen handhelds are handled too (see <a href="#devices">Devices</a>).<br>
+Made and tested on the AYN Thor; single-screen devices work too, tested on a phone (see <a href="#devices">Devices</a>).<br>
 The receiver runs on Samsung TVs (Tizen) and on Android TV / Google TV. You don't need a PC, a cable or root.
 </p>
 
@@ -26,12 +26,14 @@ I wanted to play games from my Thor on the TV and still see both screens.
 I have a Samsung TV and wanted the picture to go straight to it, not through a PC and not over cables.
 At the time I couldn't find any software that did this the way I needed, so I made DuoBeam:
 open the receiver on the TV, press Start on the Thor, and play.
+I made it with the help of Claude Code, an AI coding assistant, and tested every build on my Thor and TVs.
 
 ## What it does
 
 **On the Thor**
 - Five layouts: side by side, one above the other, big top screen with a small bottom one, top only, bottom only. You can switch while playing.
 - 60 fps HEVC (H.265) video with three quality levels. When Wi-Fi gets congested, late frames are dropped and the bitrate goes down for a moment, then recovers.
+- The picture is scaled down to what the TV can play: each receiver tells the app the largest picture its decoder takes. Turning a phone restarts the stream in the new shape.
 - Game sound on the TV only, on the TV and the Thor, or on the Thor only. Without a receiver, the Thor keeps its sound as usual.
 - "Picture only on the TV": the backlight of one or both Thor screens turns off. Buttons keep working. Touch on a dark screen can be blocked or kept on. Tap a dark screen 3 times quickly to turn it back on.
 - Control while playing from a side bar on the bottom screen, from the notification, or from a Quick Settings tile.
@@ -40,7 +42,9 @@ open the receiver on the TV, press Start on the Thor, and play.
 **On the TV**
 - Samsung plays the stream with its low-latency player (the ultra-low latency mode Samsung describes for game streaming). TVs without that player fall back to the regular one automatically.
 - Android TV decodes in hardware straight to the screen.
-- Same remote keys on both: **OK** shows the delay meter, **↑/↓** picks lowest delay / balanced / smoothest, **←/→** switches the language.
+- Same remote keys on both: **OK** shows the delay meter (on Android TV also the decoder, its setup step and restarts), **↑/↓** picks lowest delay / balanced / smoothest, **←/→** switches the language.
+- One handheld at a time: while one streams, a second one is turned away instead of taking over the TV.
+- When something still fails after the automatic fixes, the TV and the app say what happened and what to try.
 
 ### Layouts
 
@@ -60,9 +64,10 @@ Top screen: the Thor's home screen, bottom screen: the DuoBeam app.
 ## Devices
 
 DuoBeam is made and tested on the **AYN Thor** (Android 13).
-The app looks for the device's built-in screens itself, so it should also work on single-screen Android handhelds
-(Anbernic, Retroid, AYN Odin and similar): it then sends the one screen and hides the options that only make sense with two.
-I haven't tested this on such a device yet; reports are welcome.
+The app looks for the device's built-in screens itself, so it also works on single-screen devices:
+it then sends the one screen and hides the options that only make sense with two.
+Tested on a **Samsung Galaxy S26 Ultra** phone: pairing, its portrait screen on a Samsung TV, and turning it to landscape and back.
+Single-screen handhelds (Anbernic, Retroid, AYN Odin and similar) should behave the same; I haven't tested one yet, so reports are welcome.
 
 What the handheld needs:
 - Android 11 or newer, 64-bit ARM
@@ -84,6 +89,8 @@ If the app goes away, the helper stops by itself within about 5 seconds.
 encodes it with the Thor's hardware HEVC encoder at a constant 60 fps, wraps each frame in an fMP4 fragment,
 and sends it over TCP. Frames older than 150 ms are dropped instead of sent late.
 If the TV reports that it fell behind, the next frame is a keyframe.
+Before each stream the app asks the receiver for the largest picture its decoder plays (width, height and the total size its HEVC level allows),
+and the helper scales the picture down to fit, keeping its shape. If the handheld's encoder refuses a size, smaller ones are tried.
 
 **Audio.** Game and media audio is captured with Android's playback capture and sent with the video
 as uncompressed PCM, which both TV players play reliably. In "TV only" mode the sound is taken away from the Thor speakers,
@@ -92,7 +99,8 @@ in "TV and Thor" it plays in both places.
 **Receivers.** On Samsung the receiver is a Tizen web app with a small Node service on the TV.
 The service accepts the TCP stream, and the page feeds Samsung's Elementary Media Stream Source
 in its ultra-low latency mode, which Samsung documents for game streaming. On Android TV the frames go into `MediaCodec`, which renders directly to the screen,
-and the sound goes into an `AudioTrack`.
+and the sound goes into an `AudioTrack`. TV decoders differ a lot in how they handle low-latency settings, so the Android TV receiver
+starts with the settings meant for its chip and steps down to fewer settings by itself if the decoder stops or shows only a few frames per second.
 
 **Delay meter.** The Thor timestamps every frame and the receiver keeps its clock in sync with short pings,
 so the receiver can show how long each frame spent on the Thor, on Wi-Fi and on the TV.
@@ -123,12 +131,14 @@ Get `DuoBeam-androidtv-<version>.apk` from [Releases](../../releases) and instal
 
 - **Obtainium**, if you use it on the TV. It adds this repository with a filter for the TV receiver APK and keeps it updated.
 
-  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-androidtv-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.tv%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FDysprohol%2Fduobeam%22%2C%22author%22%3A%22Dysprohol%22%2C%22name%22%3A%22DuoBeam%20TV%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-androidtv-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
 
 - **Downloader** (by AFTVnews, in the Play Store on the TV): type the APK's download link and install it.
 - **USB stick**: copy the APK to it, plug it into the TV and open the file in a file manager.
 - **Send Files to TV** or any file manager: copy the APK from your phone, then open it on the TV.
 - **adb**, if you have it: turn on debugging in the TV's *Developer options* (on many TVs it's called USB or network debugging), then `adb connect <tv-ip>` and `adb install DuoBeam-androidtv-<version>.apk`.
+
+Newer Fire TV sticks that run Amazon's Vega OS instead of Android (for example the Fire TV Stick 4K Select) can't install APKs, so the receiver can't run on them.
 
 Android asks once whether the app you used may install apps; allow it.
 Open **DuoBeam TV** from the app list. It shows its address and waits.
@@ -177,14 +187,14 @@ Good to know:
 1. Install `DuoBeam-handheld-<version>.apk` from [Releases](../../releases). If Play Protect warns about an unknown app, choose *More details → Install anyway*.
    With [Obtainium](https://github.com/ImranR98/Obtainium) you also get updates:
 
-   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FGengaroshi%2Fduobeam%22%2C%22author%22%3A%22Gengaroshi%22%2C%22name%22%3A%22DuoBeam%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-handheld-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
+   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.duobeam.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FDysprohol%2Fduobeam%22%2C%22author%22%3A%22Dysprohol%22%2C%22name%22%3A%22DuoBeam%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22DuoBeam-handheld-.%2A%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img src="docs/img/badge-obtainium.png" alt="Get it on Obtainium" height="48"></a>
 
-   (or add `https://github.com/Gengaroshi/duobeam` in Obtainium yourself and pick the `DuoBeam-handheld` file).
+   (or add `https://github.com/Dysprohol/duobeam` in Obtainium yourself and pick the `DuoBeam-handheld` file).
 
-2. Open DuoBeam and go through **One-time setup**:
-   - Developer options must be on: *Settings → About → tap "Build number" 7 times*.
-   - Tap **Set up**. Developer options open on the other screen, so the DuoBeam screen stays visible.
-   - Go to *Wireless debugging → Pair device with pairing code* and type the 6-digit code into DuoBeam.
+2. Open DuoBeam and go through **One-time setup** (it's at the top of the app until it's done):
+   - Developer options must be on: *Settings → About → tap "Build number" 7 times* (on Samsung: *Software information → Build number*). If they're off, **Set up** opens that screen for you.
+   - Tap **Set up**. On the Thor, Developer options open on the other screen, so the DuoBeam screen stays visible; on a phone you can type the code into DuoBeam's notification.
+   - Go to *Wireless debugging → Pair device with pairing code* and type the 6-digit code into DuoBeam. Pairing starts after the sixth digit.
 
    After pairing, DuoBeam can turn Wireless debugging on by itself, so you don't have to repeat this after a restart.
    Wireless debugging only works on Wi-Fi, which DuoBeam needs anyway.
@@ -198,6 +208,8 @@ Good to know:
 - **Stutters.** Leave *Keep Wi-Fi at full speed* on, use 5 GHz Wi-Fi, try a lower quality or 30 fps, or press ↑/↓ on the TV for the *balanced* mode.
 - **The side bar doesn't appear.** It only shows while streaming, and it needs the *Display over other apps* permission. While that permission is missing, DuoBeam shows a shortcut to it under the side bar option.
 - **"Pair again".** Needed after clearing DuoBeam's data or if you revoke the debugging authorizations in Developer options.
+- **The TV says its decoder keeps stopping, or that it can't play this picture size.** Try another layout or a lower quality. If it doesn't help, press OK on the Android TV remote and send a photo of the info box with an [issue](../../issues).
+- **The receiver gets nothing although Start was pressed.** Another handheld may be streaming to that TV; only one at a time is accepted.
 
 ## Build from source
 
@@ -255,6 +267,7 @@ The stream is a sequence of messages `[length u32][type u8][payload]`:
 - No accounts, logins or API keys. DuoBeam never asks for credentials.
 - No internet connections, analytics or telemetry. All traffic stays in your local network: handheld → TV on TCP 8201 and 8202.
 - The stream isn't encrypted, so use DuoBeam on a network you trust.
+- A receiver takes one handheld at a time. On Samsung TVs the picture is passed to the TV's own player only; other devices on the network get no picture from the receiver.
 - The helper on the handheld only listens on 127.0.0.1 and needs a random token that only the app knows. The token is masked in logs.
 - The Wireless debugging pairing key stays in the app's private storage. After pairing, DuoBeam grants itself `WRITE_SECURE_SETTINGS` so it can turn Wireless debugging back on after a restart. To undo this, remove DuoBeam from *Developer options → Wireless debugging → Paired devices* and uninstall the app.
 
@@ -262,19 +275,11 @@ The stream is a sequence of messages `[length u32][type u8][payload]`:
 
 Receivers for Windows, Linux and macOS.
 
-## How it was made
-
-DuoBeam was built with Claude Code, Anthropic's AI coding assistant. Most of the code and documentation was written by it, not typed by me. My part: deciding what the app should do and how it should behave, testing every build on my Thor and TVs, reporting what was broken and deciding what goes in. Commits it worked on are marked with `Co-Authored-By: Claude`.
-
 ## Feedback
 
 DuoBeam is a hobby project. If you try it, I'd like to hear how it went, especially on handhelds other than the Thor.
 Found a bug or have an idea? Open an [issue](../../issues) and include your handheld model, Android version,
 the TV or receiver you used and what happened. I'll try to answer, though it can take a few days.
-
-If DuoBeam is useful to you and you'd like to say thanks, you can leave a tip on Ko-fi:
-
-<a href="https://ko-fi.com/gengaroshi"><img src="docs/img/kofi-button.png" alt="Support me on Ko-fi" width="159"></a>
 
 ## License
 
