@@ -5,7 +5,7 @@
 <p align="center">
 DuoBeam przesyła oba ekrany dwuekranowej konsoli z Androidem na telewizor przez Wi-Fi, razem z dźwiękiem gry.<br>
 Powstał i jest testowany na AYN Thorze; urządzenia z jednym ekranem też działają, sprawdzone na telefonie (zobacz <a href="#urządzenia">Urządzenia</a>).<br>
-Odbiornik działa na telewizorach Samsunga (Tizen) i na Android TV / Google TV. Bez komputera, kabli i roota.
+Odbiornik działa na telewizorach Samsunga (Tizen), na Android TV / Google TV i na komputerach z Windowsem. Do telewizora nie trzeba komputera, kabli ani roota.
 </p>
 
 <p align="center"><a href="README.md">English version</a></p>
@@ -45,6 +45,12 @@ Zrobiłem go z wykorzystaniem Claude Code, asystenta AI do programowania, i test
 - Te same przyciski pilota na obu: **OK** pokazuje pomiar opóźnienia (na Android TV także dekoder, jego ustawienie i restarty), **↑/↓** wybiera najmniejsze opóźnienie / zrównoważony / najpłynniejszy, **←/→** zmienia język.
 - Jedna konsola naraz: gdy jedna nadaje, druga zostaje odrzucona, zamiast przejmować telewizor.
 - Gdy mimo automatycznych poprawek coś nie działa, telewizor i aplikacja mówią, co się stało i co spróbować.
+
+**Na komputerze z Windowsem**
+- Jeden plik `.exe`, bez instalacji. Obraz w oknie albo na pełnym ekranie, z dźwiękiem gry.
+- Sprzętowe dekodowanie przez Direct3D 11, jeśli karta graficzna je ma, w przeciwnym razie programowe.
+- Przyciski pokazują się po ruszeniu myszą: pełny ekran, zawsze na wierzchu, opóźnienie vs płynność, dopasuj / wypełnij / 1:1, gładkie lub ostre skalowanie, głośność, zrzut ekranu, informacje, język. Klawisze: **Enter** informacje, **↑/↓** opóźnienie vs płynność, **F11** albo podwójne kliknięcie pełny ekran, **T** na wierzchu, **S** dopasuj / wypełnij / 1:1, **P** ostre skalowanie, **M** wyciszenie, **−/+** albo kółko głośność, **F12** zrzut ekranu, **L** albo **←/→** język, **Esc** wyjście z pełnego ekranu albo z programu.
+- Rozmiar i położenie okna oraz ustawienia zostają na następne uruchomienie; zrzuty trafiają do *Obrazy\DuoBeam*.
 
 ### Układy
 
@@ -99,6 +105,8 @@ Usługa odbiera strumień TCP, a strona podaje go do Samsung Elementary Media St
 w trybie ultra niskiego opóźnienia, który Samsung opisuje do streamingu gier. Na Android TV klatki trafiają do `MediaCodec`, który wyświetla je bezpośrednio na ekranie,
 a dźwięk do `AudioTrack`. Dekodery w telewizorach bardzo różnie reagują na ustawienia niskiego opóźnienia, więc odbiornik Android TV
 zaczyna od ustawień przewidzianych dla swojego układu i sam schodzi do mniejszej ich liczby, gdy dekoder staje albo pokazuje tylko kilka klatek na sekundę.
+Na Windowsie odbiornik dekoduje przez FFmpeg (z PyAV), skaluje obraz do okna w FFmpeg i pokazuje go w oknie SDL (z pygame);
+dźwięk trafia na domyślne wyjście wybrane w Windowsie. Tryby opóźnienie vs płynność opóźniają dźwięk tak samo jak obraz.
 
 **Pomiar opóźnienia.** Thor oznacza każdą klatkę znacznikiem czasu, a odbiornik synchronizuje z nim zegar krótkimi pingami,
 więc może pokazać, ile każda klatka spędziła na Thorze, w Wi-Fi i na telewizorze.
@@ -116,6 +124,10 @@ Wbudowany licznik w 0.8.3, od nowego obrazu na Thorze do klatki w odtwarzaczu TV
 Dwa nagrania kamerą Thora i telewizora Xiaomi naraz (ten sam dzień, ta sama scena) pokazały ~133 ms i ~200 ms
 od ekranu Thora do ekranu TV. Podczas drugiego Wi-Fi było przeciążone, a licznik pokazywał 64–103 ms,
 więc ten telewizor dokłada czas już po miejscu, w którym licznik kończy pomiar, i aplikacje tej części nie widzą.
+
+Odbiornik na Windowsa w 0.8.8 (pomiar 2026-10-23 na komputerze z Windows 11 i dekodowaniem Direct3D 11, 60 kl/s) pokazywał ~30 ms w trybie najmniejszego opóźnienia
+(Thor ~20, Wi-Fi ~3, PC ~6), ~62 ms w zrównoważonym i ~127 ms w najpłynniejszym, do chwili przekazania obrazu do okna.
+Bez pomiaru kamerą.
 
 ## Instalacja
 
@@ -180,6 +192,15 @@ Warto wiedzieć:
 - Aktualizuj tym samym narzędziem i certyfikatem co za pierwszym razem. Jeśli instalacja kończy się błędem certyfikatu, najpierw odinstaluj DuoBeam z TV.
 - Testowane na Q67C z 2023 roku (Tizen 8). Modele bez odtwarzacza niskiego opóźnienia same przechodzą na zwykły odtwarzacz; na moim TV zwykły odtwarzacz miał około 250 ms opóźnienia.
 
+### 1c. Odbiornik na komputer z Windowsem
+
+1. Pobierz `DuoBeam-pc-<wersja>.exe` z [Releases](../../releases) i uruchom. Potrzebny jest 64-bitowy Windows 10 lub 11; testowane na Windows 11.
+   Plik nie ma podpisu cyfrowego, więc Windows SmartScreen może ostrzec przed nieznaną aplikacją: wybierz *Więcej informacji → Uruchom mimo to*.
+2. Jeśli Zapora Windows zapyta, zezwól DuoBeam w sieciach **prywatnych**. Bez tego Thor się z nim nie połączy.
+3. Okno pokaże adres komputera i będzie czekać, tak jak odbiorniki na TV.
+
+Działa tylko jedna kopia naraz: druga zgłosi, że porty są zajęte.
+
 ### 2. Aplikacja na Thorze
 
 1. Zainstaluj `DuoBeam-handheld-<wersja>.apk` z [Releases](../../releases). Jeśli Play Protect ostrzega o nieznanej aplikacji, wybierz *Więcej szczegółów → Zainstaluj mimo to*.
@@ -203,6 +224,7 @@ Warto wiedzieć:
 ## Wskazówki i problemy
 
 - **Znajdź odbiornik nie widzi TV.** Upewnij się, że odbiornik jest otwarty na TV. Jeśli telewizor jest w innej podsieci, wpisz adres widoczny na TV. Użyty raz odbiornik jest sprawdzany jako pierwszy przy następnym wyszukiwaniu.
+- **Znajdź odbiornik nie widzi komputera.** Zezwól DuoBeam w Zaporze Windows dla sieci prywatnych i sprawdź, czy Windows traktuje twoje Wi-Fi albo Ethernet jako sieć prywatną.
 - **Przycięcia.** Zostaw włączone *Wi-Fi na pełnej mocy*, używaj Wi-Fi 5 GHz, spróbuj niższej jakości albo 30 kl/s, albo przełącz na TV strzałkami ↑/↓ na tryb *zrównoważony*.
 - **Pasek boczny się nie pojawia.** Pokazuje się tylko podczas streamu i potrzebuje uprawnienia *Wyświetlanie nad innymi aplikacjami*. Dopóki go brakuje, DuoBeam pokazuje pod opcją paska skrót do tego ustawienia.
 - **„Sparuj ponownie”.** Potrzebne po wyczyszczeniu danych DuoBeam albo po cofnięciu autoryzacji debugowania w opcjach programisty.
@@ -216,7 +238,7 @@ Polecenia budowania, struktura katalogów i opis protokołu są w [README.md](RE
 ## Bezpieczeństwo i prywatność
 
 - Żadnych kont, logowań ani kluczy API. DuoBeam nigdy nie prosi o dane logowania.
-- Żadnych połączeń z internetem, analityki ani telemetrii. Cały ruch zostaje w sieci lokalnej: konsola → TV na portach TCP 8201 i 8202.
+- Żadnych połączeń z internetem, analityki ani telemetrii. Cały ruch zostaje w sieci lokalnej: konsola → TV albo komputer na portach TCP 8201 i 8202.
 - Strumień nie jest szyfrowany, więc używaj DuoBeam w zaufanej sieci.
 - Odbiornik przyjmuje jedną konsolę naraz. Na telewizorach Samsunga obraz trafia tylko do odtwarzacza na samym telewizorze; inne urządzenia w sieci nie dostaną go z odbiornika.
 - Proces pomocniczy na konsoli nasłuchuje tylko na 127.0.0.1 i wymaga losowego tokenu, który zna wyłącznie aplikacja. Token jest maskowany w logach.
@@ -224,7 +246,7 @@ Polecenia budowania, struktura katalogów i opis protokołu są w [README.md](RE
 
 ## Plany
 
-Odbiorniki na Windowsa, Linuksa i macOS.
+Odbiorniki na Linuksa i macOS.
 
 ## Uwagi i zgłoszenia
 
@@ -235,5 +257,7 @@ telewizor lub odbiornik oraz co się stało. Postaram się odpowiedzieć, choć 
 ## Licencja
 
 Apache License 2.0, zobacz [LICENSE](LICENSE). Dołączony kod innych projektów (scrcpy, libadb-android, sun-security-android, Conscrypt) jest wymieniony w [NOTICE](NOTICE).
+Plik `.exe` na Windowsa zawiera dodatkowo Pythona, PyAV z FFmpeg, pygame z SDL i NumPy. Jego FFmpeg zawiera x264 i x265 (GNU GPL),
+więc `.exe` jako całość jest rozpowszechniany na licencji GNU GPL v3; [NOTICE](NOTICE) wymienia te części i miejsca ich źródeł.
 
-AYN, Thor, Samsung, Tizen i Android TV to znaki towarowe swoich właścicieli. DuoBeam jest niezależnym projektem i nie jest z nimi powiązany.
+AYN, Thor, Samsung, Tizen, Android TV i Windows to znaki towarowe swoich właścicieli. DuoBeam jest niezależnym projektem i nie jest z nimi powiązany.

@@ -32,3 +32,9 @@ __pycache__/
 docs/vid/
 *.mp4
 *.mov
+
+# PC receiver: local Python environment and PyInstaller output
+pc-receiver/.venv/
+pc-receiver/build/
+pc-receiver/dist/
+*.spec

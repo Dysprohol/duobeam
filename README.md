@@ -5,7 +5,7 @@
 <p align="center">
 DuoBeam sends both screens of a dual-screen Android handheld to a TV over Wi-Fi, together with the game sound.<br>
 Made and tested on the AYN Thor; single-screen devices work too, tested on a phone (see <a href="#devices">Devices</a>).<br>
-The receiver runs on Samsung TVs (Tizen) and on Android TV / Google TV. You don't need a PC, a cable or root.
+The receiver runs on Samsung TVs (Tizen), on Android TV / Google TV and on Windows PCs. For a TV you don't need a PC, a cable or root.
 </p>
 
 <p align="center"><a href="README.pl.md">Polska wersja</a></p>
@@ -45,6 +45,12 @@ I made it with the help of Claude Code, an AI coding assistant, and tested every
 - Same remote keys on both: **OK** shows the delay meter (on Android TV also the decoder, its setup step and restarts), **↑/↓** picks lowest delay / balanced / smoothest, **←/→** switches the language.
 - One handheld at a time: while one streams, a second one is turned away instead of taking over the TV.
 - When something still fails after the automatic fixes, the TV and the app say what happened and what to try.
+
+**On a Windows PC**
+- One `.exe`, nothing to install. The picture plays in a window or full screen, with the game sound.
+- Hardware decoding through Direct3D 11 where the graphics card has it, software decoding otherwise.
+- Controls appear when you move the mouse: full screen, always on top, delay vs smoothness, fit / fill / 1:1, smooth or sharp scaling, volume, screenshot, info box, language. Keys: **Enter** info, **↑/↓** delay vs smoothness, **F11** or double-click full screen, **T** on top, **S** fit / fill / 1:1, **P** sharp scaling, **M** mute, **−/+** or the wheel volume, **F12** screenshot, **L** or **←/→** language, **Esc** leaves full screen or quits.
+- Window size, position and settings are kept for the next start; screenshots go to *Pictures\DuoBeam*.
 
 ### Layouts
 
@@ -101,6 +107,8 @@ The service accepts the TCP stream, and the page feeds Samsung's Elementary Medi
 in its ultra-low latency mode, which Samsung documents for game streaming. On Android TV the frames go into `MediaCodec`, which renders directly to the screen,
 and the sound goes into an `AudioTrack`. TV decoders differ a lot in how they handle low-latency settings, so the Android TV receiver
 starts with the settings meant for its chip and steps down to fewer settings by itself if the decoder stops or shows only a few frames per second.
+On Windows the receiver decodes with FFmpeg (through PyAV), scales the picture to the window in FFmpeg and shows it in an SDL window (through pygame);
+the sound goes to the default output chosen in Windows. Its delay vs smoothness modes keep the sound as far behind as the picture.
 
 **Delay meter.** The Thor timestamps every frame and the receiver keeps its clock in sync with short pings,
 so the receiver can show how long each frame spent on the Thor, on Wi-Fi and on the TV.
@@ -118,6 +126,10 @@ Built-in meter in 0.8.3, from the new picture on the Thor until the TV player ha
 Two camera recordings of the Thor and the Xiaomi TV together (same day, same scene) showed ~133 ms and ~200 ms
 from the Thor's screen to the TV's screen. During the second one the Wi-Fi was congested and the meter read 64–103 ms,
 so this TV adds time after the point where the meter stops, and apps cannot see that part.
+
+The Windows receiver in 0.8.8 (measured 2026-10-23 on a Windows 11 PC with Direct3D 11 decoding, 60 fps) read ~30 ms in lowest delay mode
+(Thor ~20, Wi-Fi ~3, PC ~6), ~62 ms in balanced and ~127 ms in smoothest, until the picture is handed to the window.
+Not measured with a camera.
 
 ## Install
 
@@ -182,6 +194,15 @@ Good to know:
 - Update with the same tool and certificate you used the first time. If the install fails with a certificate error, uninstall DuoBeam from the TV first.
 - Tested on a 2023 Q67C (Tizen 8). Models without the low-latency player fall back to the regular player automatically; on my TV the regular player had about 250 ms of delay.
 
+### 1c. Windows PC receiver
+
+1. Get `DuoBeam-pc-<version>.exe` from [Releases](../../releases) and start it. It needs 64-bit Windows 10 or 11; tested on Windows 11.
+   The file isn't code-signed, so Windows SmartScreen may warn about an unknown app: choose *More info → Run anyway*.
+2. If Windows Firewall asks, allow DuoBeam on **private** networks. Without that the Thor can't reach it.
+3. The window shows the PC's address and waits, like the TV receivers.
+
+Only one copy runs at a time: a second one says that the ports are in use.
+
 ### 2. The app on the Thor
 
 1. Install `DuoBeam-handheld-<version>.apk` from [Releases](../../releases). If Play Protect warns about an unknown app, choose *More details → Install anyway*.
@@ -205,6 +226,7 @@ Good to know:
 ## Tips and problems
 
 - **Find receiver doesn't find the TV.** Make sure the receiver is open on the TV. If your TV is in another subnet, type the address shown on the TV into the field. Once a receiver was used, it is checked first next time.
+- **Find receiver doesn't find the PC.** Allow DuoBeam in Windows Firewall for private networks, and check that Windows treats your Wi-Fi or Ethernet as a private network.
 - **Stutters.** Leave *Keep Wi-Fi at full speed* on, use 5 GHz Wi-Fi, try a lower quality or 30 fps, or press ↑/↓ on the TV for the *balanced* mode.
 - **The side bar doesn't appear.** It only shows while streaming, and it needs the *Display over other apps* permission. While that permission is missing, DuoBeam shows a shortcut to it under the side bar option.
 - **"Pair again".** Needed after clearing DuoBeam's data or if you revoke the debugging authorizations in Developer options.
@@ -224,6 +246,14 @@ Without a signing setup the release build is signed with your debug key, which i
 To sign with your own key, point `DUOBEAM_SIGNING` at a properties file with `storeFile`, `storePassword`, `keyAlias` and `keyPassword`.
 
 The Samsung receiver is packaged and installed by `tizen-receiver/deploy.sh` (see above).
+
+The Windows receiver needs Python 3.11+. `build_exe.ps1` puts the libraries into `pc-receiver/.venv` and builds `dist\DuoBeam-pc-<version>.exe` with PyInstaller;
+`python duobeam_receiver.py` runs it straight from the sources after `pip install -r requirements.txt`:
+
+```powershell
+cd pc-receiver
+powershell -ExecutionPolicy Bypass -File build_exe.ps1
+```
 
 The helper can also run alone from `adb shell`, which is handy when working on the encoder:
 
@@ -247,6 +277,9 @@ tizen-receiver/
   js/emss.js                low-latency player (Samsung Elementary Media Stream Source)
   js/player.js              fallback player, waiting screen, delay meter
   deploy.sh                 package and install on the TV
+pc-receiver/
+  duobeam_receiver.py       Windows receiver: stream, decoding, sound, window and controls
+  build_exe.ps1             builds the single .exe
 docs/                       README images and the diagram source
 ```
 
@@ -265,7 +298,7 @@ The stream is a sequence of messages `[length u32][type u8][payload]`:
 ## Security and privacy
 
 - No accounts, logins or API keys. DuoBeam never asks for credentials.
-- No internet connections, analytics or telemetry. All traffic stays in your local network: handheld → TV on TCP 8201 and 8202.
+- No internet connections, analytics or telemetry. All traffic stays in your local network: handheld → TV or PC on TCP 8201 and 8202.
 - The stream isn't encrypted, so use DuoBeam on a network you trust.
 - A receiver takes one handheld at a time. On Samsung TVs the picture is passed to the TV's own player only; other devices on the network get no picture from the receiver.
 - The helper on the handheld only listens on 127.0.0.1 and needs a random token that only the app knows. The token is masked in logs.
@@ -273,7 +306,7 @@ The stream is a sequence of messages `[length u32][type u8][payload]`:
 
 ## Plans
 
-Receivers for Windows, Linux and macOS.
+Receivers for Linux and macOS.
 
 ## Feedback
 
@@ -284,5 +317,7 @@ the TV or receiver you used and what happened. I'll try to answer, though it can
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE). Bundled third-party code (scrcpy, libadb-android, sun-security-android, Conscrypt) is listed in [NOTICE](NOTICE).
+The Windows `.exe` also bundles Python, PyAV with FFmpeg, pygame with SDL, and NumPy. Its FFmpeg build includes x264 and x265 (GNU GPL),
+so the `.exe` as a whole is distributed under the GNU GPL v3; [NOTICE](NOTICE) lists the parts and where their sources are.
 
-AYN, Thor, Samsung, Tizen and Android TV are trademarks of their owners. DuoBeam is an independent project and is not affiliated with them.
+AYN, Thor, Samsung, Tizen, Android TV and Windows are trademarks of their owners. DuoBeam is an independent project and is not affiliated with them.
