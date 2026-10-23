@@ -48,7 +48,9 @@ Zrobiłem go z wykorzystaniem Claude Code, asystenta AI do programowania, i test
 
 **Na komputerze z Windowsem**
 - Jeden plik `.exe`, bez instalacji. Obraz w oknie albo na pełnym ekranie, z dźwiękiem gry.
-- Sprzętowe dekodowanie przez Direct3D 11, jeśli karta graficzna je ma, w przeciwnym razie programowe.
+- Sprzętowe dekodowanie przez Direct3D 11, jeśli karta graficzna je ma, w przeciwnym razie programowe. Przy starcie odbiornik sprawdza, co ten komputer zdekoduje (obraz testowy przez kartę graficzną, tempo dekodowania na procesorze), i podaje konsoli największy obraz, jaki odtworzy, tak jak telewizory.
+- Karta graficzna skaluje obraz do okna, także na ekranach ze skalowaniem (125–200 %) w ich prawdziwej rozdzielczości, a pełny ekran zajmuje monitor, na którym stoi okno.
+- Zmiana układu pokazuje krótki ekran „Zmieniam układ”, a stary obraz płynnie przechodzi w nowy; dopasuj / wypełnij / 1:1 zmieniają się płynnie.
 - Przyciski pokazują się po ruszeniu myszą: pełny ekran, zawsze na wierzchu, opóźnienie vs płynność, dopasuj / wypełnij / 1:1, gładkie lub ostre skalowanie, głośność, zrzut ekranu, informacje, język. Klawisze: **Enter** informacje, **↑/↓** opóźnienie vs płynność, **F11** albo podwójne kliknięcie pełny ekran, **T** na wierzchu, **S** dopasuj / wypełnij / 1:1, **P** ostre skalowanie, **M** wyciszenie, **−/+** albo kółko głośność, **F12** zrzut ekranu, **L** albo **←/→** język, **Esc** wyjście z pełnego ekranu albo z programu.
 - Rozmiar i położenie okna oraz ustawienia zostają na następne uruchomienie; zrzuty trafiają do *Obrazy\DuoBeam*.
 
@@ -105,8 +107,9 @@ Usługa odbiera strumień TCP, a strona podaje go do Samsung Elementary Media St
 w trybie ultra niskiego opóźnienia, który Samsung opisuje do streamingu gier. Na Android TV klatki trafiają do `MediaCodec`, który wyświetla je bezpośrednio na ekranie,
 a dźwięk do `AudioTrack`. Dekodery w telewizorach bardzo różnie reagują na ustawienia niskiego opóźnienia, więc odbiornik Android TV
 zaczyna od ustawień przewidzianych dla swojego układu i sam schodzi do mniejszej ich liczby, gdy dekoder staje albo pokazuje tylko kilka klatek na sekundę.
-Na Windowsie odbiornik dekoduje przez FFmpeg (z PyAV), skaluje obraz do okna w FFmpeg i pokazuje go w oknie SDL (z pygame);
-dźwięk trafia na domyślne wyjście wybrane w Windowsie. Tryby opóźnienie vs płynność opóźniają dźwięk tak samo jak obraz.
+Na Windowsie odbiornik dekoduje przez FFmpeg (z PyAV) i wkłada każdą klatkę do tekstury w rozmiarze strumienia; SDL (z pygame)
+rysuje ją kartą graficzną, a na komputerze bez niej swoim programowym rendererem. Dźwięk trafia na domyślne wyjście wybrane w Windowsie,
+a tryby opóźnienie vs płynność opóźniają go tak samo jak obraz.
 
 **Pomiar opóźnienia.** Thor oznacza każdą klatkę znacznikiem czasu, a odbiornik synchronizuje z nim zegar krótkimi pingami,
 więc może pokazać, ile każda klatka spędziła na Thorze, w Wi-Fi i na telewizorze.
@@ -127,7 +130,7 @@ więc ten telewizor dokłada czas już po miejscu, w którym licznik kończy pom
 
 Odbiornik na Windowsa w 0.8.8 (pomiar 2026-10-23 na komputerze z Windows 11 i dekodowaniem Direct3D 11, 60 kl/s) pokazywał ~30 ms w trybie najmniejszego opóźnienia
 (Thor ~20, Wi-Fi ~3, PC ~6), ~62 ms w zrównoważonym i ~127 ms w najpłynniejszym, do chwili przekazania obrazu do okna.
-Bez pomiaru kamerą.
+W 0.8.9 z wymuszonym dekodowaniem programowym na tym samym komputerze ~29 ms (PC ~6) przy 2416x824. Bez pomiaru kamerą.
 
 ## Instalacja
 

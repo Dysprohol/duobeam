@@ -14,7 +14,7 @@ android {
         applicationId 'com.duobeam.tv'
         minSdk 24          // Android TV 7+ (Chromecast with Google TV, Shield, Mi Box, TV sets with Google TV)
         targetSdk 33
-        versionCode 15
+        versionCode 16
         versionName duobeamVersion.version
     }
 

@@ -52,7 +52,7 @@ import java.util.Map;
  */
 public final class Sender {
 
-    public static final String VERSION = "0.8.8";
+    public static final String VERSION = "0.8.9";
     private static final String NL = "\n";
 
     private static Map<String, String> opts;
@@ -135,6 +135,25 @@ public final class Sender {
         // unblocks a send to a TV that no longer answers.
         generation++;
         Socket s = liveSock;
+        // A restart (layout change) tells the TV first, so it shows its "switching layout" screen. Closing the socket
+        // came before the worker's own message, so no receiver got it since 0.8.7 (seen on the PC receiver,
+        // 2026-10-23). The write gets 300 ms, so a TV that vanished still cannot hold the stop up.
+        final DataOutputStream o = liveOut;
+        if (switching && o != null) {
+            Thread t = new Thread(() -> {
+                try {
+                    send(o, 4, new byte[0]);
+                } catch (IOException ignored) {
+                }
+            }, "DuoBeamSwitching");
+            t.setDaemon(true);
+            t.start();
+            try {
+                t.join(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         if (s != null) closeQuietly(s);
         if (!switching) ScreenPower.restoreAll();
         if (worker != null) {

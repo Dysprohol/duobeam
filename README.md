@@ -48,7 +48,9 @@ I made it with the help of Claude Code, an AI coding assistant, and tested every
 
 **On a Windows PC**
 - One `.exe`, nothing to install. The picture plays in a window or full screen, with the game sound.
-- Hardware decoding through Direct3D 11 where the graphics card has it, software decoding otherwise.
+- Hardware decoding through Direct3D 11 where the graphics card has it, software decoding otherwise. At start the receiver checks what this PC decodes (a test picture through the graphics card, the decoding speed of the processor) and tells the handheld the largest picture it can play, like the TVs do.
+- The graphics card scales the picture to the window, also on scaled screens (125–200 %) at their real resolution, and full screen uses the monitor the window is on.
+- Layout changes show a short "switching layout" screen and the old picture fades into the new one; fit / fill / 1:1 change smoothly.
 - Controls appear when you move the mouse: full screen, always on top, delay vs smoothness, fit / fill / 1:1, smooth or sharp scaling, volume, screenshot, info box, language. Keys: **Enter** info, **↑/↓** delay vs smoothness, **F11** or double-click full screen, **T** on top, **S** fit / fill / 1:1, **P** sharp scaling, **M** mute, **−/+** or the wheel volume, **F12** screenshot, **L** or **←/→** language, **Esc** leaves full screen or quits.
 - Window size, position and settings are kept for the next start; screenshots go to *Pictures\DuoBeam*.
 
@@ -107,8 +109,9 @@ The service accepts the TCP stream, and the page feeds Samsung's Elementary Medi
 in its ultra-low latency mode, which Samsung documents for game streaming. On Android TV the frames go into `MediaCodec`, which renders directly to the screen,
 and the sound goes into an `AudioTrack`. TV decoders differ a lot in how they handle low-latency settings, so the Android TV receiver
 starts with the settings meant for its chip and steps down to fewer settings by itself if the decoder stops or shows only a few frames per second.
-On Windows the receiver decodes with FFmpeg (through PyAV), scales the picture to the window in FFmpeg and shows it in an SDL window (through pygame);
-the sound goes to the default output chosen in Windows. Its delay vs smoothness modes keep the sound as far behind as the picture.
+On Windows the receiver decodes with FFmpeg (through PyAV) and puts each picture into a texture at the stream's own size; SDL (through pygame)
+draws it with the graphics card, or with its software renderer on a PC without one. The sound goes to the default output chosen in Windows,
+and the delay vs smoothness modes keep it as far behind as the picture.
 
 **Delay meter.** The Thor timestamps every frame and the receiver keeps its clock in sync with short pings,
 so the receiver can show how long each frame spent on the Thor, on Wi-Fi and on the TV.
@@ -129,7 +132,7 @@ so this TV adds time after the point where the meter stops, and apps cannot see 
 
 The Windows receiver in 0.8.8 (measured 2026-10-23 on a Windows 11 PC with Direct3D 11 decoding, 60 fps) read ~30 ms in lowest delay mode
 (Thor ~20, Wi-Fi ~3, PC ~6), ~62 ms in balanced and ~127 ms in smoothest, until the picture is handed to the window.
-Not measured with a camera.
+In 0.8.9 with software decoding forced on the same PC it read ~29 ms (PC ~6) at 2416x824. Not measured with a camera.
 
 ## Install
 
